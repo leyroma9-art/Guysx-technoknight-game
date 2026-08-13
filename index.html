@@ -535,6 +535,9 @@ body.ios-mode .btn, body.ios-mode #shootBtn, body.ios-mode #joystickZone{
         <button type="button" id="btnClearCustomCode" style="font-size:13px;padding:10px 16px;border-radius:12px;border:1px solid #555;background:#222;color:#ddd;cursor:pointer">Очистить все</button>
       </div>
       <div id="modCodeFileInfo" style="font-size:13px;color:#888;margin-bottom:8px;min-height:20px">Моды не загружены</div>
+      <label style="display:block;font-size:12px;color:#aaa;margin:8px 0 4px;text-align:left">Или вставь код мода сюда (удобно с телефона):</label>
+      <textarea id="modCodePaste" placeholder="// function onStart(){ game.banner('ok'); }" style="width:100%;min-height:90px;border-radius:10px;border:1px solid #444;background:#111;color:#8f8;font-family:ui-monospace,monospace;font-size:12px;padding:10px;resize:vertical"></textarea>
+
       <div id="modCodeFileList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
       <div id="modCodeError" style="display:none;margin-top:8px;padding:10px;border-radius:8px;background:rgba(255,40,40,0.15);border:1px solid #f44;color:#f88;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;text-align:left"></div>
       <div id="modCodeOk" style="display:none;margin-top:6px;font-size:12px;color:#5c5">✓ Код скомпилирован</div>
@@ -1262,7 +1265,10 @@ function connectRoom(rawCode, create){
         Object.assign(mods, net.config.v1);
         if(typeof net.config.v1.customCode === 'string'){
           mods.customCode = net.config.v1.customCode;
-          if(mods.customCode) mods.customCodeFileName = mods.customCodeFileName || 'host-mod.js';
+          if(mods.customCode){
+            mods.customCodeFileName = 'host-mod.js';
+            mods.customMods = [{ name: 'host-mod.js', code: mods.customCode }];
+          }
         }
       }
       if(net.config.v2) Object.assign(bossMods, net.config.v2);
@@ -1273,12 +1279,14 @@ function connectRoom(rawCode, create){
       startGame();
       setTimeout(() => { if(running && !bossMode) startBoss(); }, 100);
     } else if(data.type === 'modcode'){
-      // live code push during session
-      if(typeof data.code === 'string' && data.code !== mods.customCode){
+      // live code push — у всех в комнате, даже без файлов
+      if(typeof data.code === 'string'){
         mods.customCode = data.code;
         mods.customCodeFileName = 'host-mod.js';
+        mods.customMods = data.code.trim() ? [{ name: 'host-mod.js', code: data.code }] : [];
+        try { localStorage.setItem('tk_mods', JSON.stringify(mods)); } catch(e){}
         try { compileUserMod(); runUserHook('onStart'); } catch(e){ console.error(e); }
-        if(statusEl){ statusEl.textContent = '📜 Мод-код обновлён хостом'; statusEl.style.color = '#8f8'; }
+        if(statusEl){ statusEl.textContent = '📜 Мод-код от хоста загружен'; statusEl.style.color = '#8f8'; }
         try { updateModCodeFileInfo(); } catch(e){}
       }
     } else if(data.type === 'modmsg'){
@@ -1688,7 +1696,19 @@ window.addEventListener('mouseup', joyEnd);
 
 // ===== MODS =====
 const defaultMods = {"npcCount": 1, "npcHp": 100, "npcName": "ТехноКнайт", "npcIsBoss": false, "weaponAmmo": 8, "weaponFireRate": 200, "weaponBullets": 1, "weaponSpread": 0.0, "playerSpeed": 5.7, "playerDash": true, "playerSize": 16, "mapSize": 3200, "weaponChance": 40, "giveWeaponOnStart": false, "deathTexts": ["Тебя настигли", "Обстреляли говном", "Тебя сожрала лужа говна", "Тарантулы сожрали", "Застрелили кончой", "Лазер Хоумлендера"]};
-let mods = JSON.parse(localStorage.getItem('tk_mods') || 'null') || {...defaultMods};
+let mods = (()=>{
+  try {
+    const raw = localStorage.getItem('tk_mods');
+    if(!raw) return {...defaultMods, customCode:'', customCodeFileName:'', customMods:[]};
+    const o = JSON.parse(raw);
+    if(!o || typeof o !== 'object') return {...defaultMods, customCode:'', customCodeFileName:'', customMods:[]};
+    if(!Array.isArray(o.customMods)) o.customMods = [];
+    if(typeof o.customCode !== 'string') o.customCode = '';
+    return o;
+  } catch(e){
+    return {...defaultMods, customCode:'', customCodeFileName:'', customMods:[]};
+  }
+})();
 
 function loadModsToUI(){
   document.getElementById('modNpcCount').value = mods.npcCount;
@@ -1857,20 +1877,53 @@ document.getElementById('btnSaveMods').onclick = () => {
   mods.giveWeaponOnStart = document.getElementById('modGiveWeapon').checked;
   const texts = document.getElementById('modDeathTexts').value.split('\n').map(t=>t.trim()).filter(Boolean);
   mods.deathTexts = texts.length ? texts : defaultMods.deathTexts;
-  // customCode уже в mods (из файла или localStorage)
-  localStorage.setItem('tk_mods', JSON.stringify(mods));
+  // textarea вставка кода (если есть)
+  const pasteEl = document.getElementById('modCodePaste');
+  if(pasteEl && pasteEl.value.trim()){
+    const code = pasteEl.value.trim();
+    if(!Array.isArray(mods.customMods)) mods.customMods = [];
+    const name = 'pasted-mod.js';
+    const existing = mods.customMods.findIndex(m => m.name === name);
+    if(existing >= 0) mods.customMods[existing] = { name, code };
+    else mods.customMods.push({ name, code });
+    mods.customCode = mods.customMods.map(m => m.code || '').join('\n;\n');
+    mods.customCodeFileName = mods.customMods.map(m => m.name).filter(Boolean).join(', ');
+    pasteEl.value = '';
+  }
+  if(typeof ensureCustomMods === 'function') ensureCustomMods();
+  try { localStorage.setItem('tk_mods', JSON.stringify(mods)); } catch(e){ alert('Не влезло в память браузера (мод слишком большой)'); }
   compileUserMod();
+  // если хост в комнате — разослать код всем
+  if(net.active && net.host && mods.customCode){
+    sendNet({ type: 'modcode', code: mods.customCode });
+  }
   showScreen('mainMenu');
 };
 
 document.getElementById('btnResetMods').onclick = () => {
-  mods = {...defaultMods, customCode: '', customCodeFileName: '', customMods: []};
-  localStorage.setItem('tk_mods', JSON.stringify(mods));
+  try { localStorage.removeItem('tk_mods'); } catch(e){}
+  mods = JSON.parse(JSON.stringify(defaultMods));
+  mods.customCode = '';
+  mods.customCodeFileName = '';
+  mods.customMods = [];
+  try { localStorage.setItem('tk_mods', JSON.stringify(mods)); } catch(e){}
+  // очистить runtime мода
+  try {
+    if(typeof modGameData === 'object'){
+      for(const k of Object.keys(modGameData)) delete modGameData[k];
+    }
+  } catch(e){}
+  try { compileUserMod(); } catch(e){}
   loadModsToUI();
   const errEl = document.getElementById('modCodeError');
   const okEl = document.getElementById('modCodeOk');
   if(errEl){ errEl.style.display = 'none'; errEl.textContent = ''; }
   if(okEl) okEl.style.display = 'none';
+  const info = document.getElementById('modCodeFileInfo');
+  if(info) info.textContent = 'Моды не загружены';
+  const list = document.getElementById('modCodeFileList');
+  if(list) list.innerHTML = '';
+  alert('Моды v1 сброшены');
 };
 
 
@@ -1980,9 +2033,12 @@ document.getElementById('btnSaveMods2').onclick = () => {
   showScreen('mainMenu');
 };
 document.getElementById('btnResetMods2').onclick = () => {
-  bossMods = {...defaultBossMods, atkWeights: [...defaultBossMods.atkWeights]};
-  localStorage.setItem('tk_boss_mods', JSON.stringify(bossMods));
+  try { localStorage.removeItem('tk_boss_mods'); } catch(e){}
+  bossMods = JSON.parse(JSON.stringify(defaultBossMods));
+  bossMods.atkWeights = [...defaultBossMods.atkWeights];
+  try { localStorage.setItem('tk_boss_mods', JSON.stringify(bossMods)); } catch(e){}
   loadBossModsToUI();
+  alert('Моды босса v2 сброшены');
 };
 
 function pickBossAttackPattern(phase){
@@ -2708,33 +2764,42 @@ function startGame(){
 document.getElementById('btnPlay').onclick = () => { leaveMultiplayer(); openPlayMenu(); };
 document.getElementById('btnAgain').onclick = () => {
   document.getElementById('go').classList.add('hidden');
-  // story-боссы: перезапуск той же главы
-  if(lastStoryFight === 'royal'){
-    leaveMultiplayer();
-    startRoyalBoss();
-    return;
-  }
-  if(lastStoryFight === 'makmar'){
-    leaveMultiplayer();
-    startMakmarBoss();
-    return;
-  }
-  if(lastStoryFight === 'sidoras'){
-    leaveMultiplayer();
-    startSidorasBoss();
-    return;
-  }
-  if(lastStoryFight === 'father'){
-    leaveMultiplayer();
+  // story-боссы только оффлайн
+  if(!net.active){
+    if(lastStoryFight === 'royal'){ startRoyalBoss(); return; }
+    if(lastStoryFight === 'makmar'){ startMakmarBoss(); return; }
+    if(lastStoryFight === 'sidoras'){ startSidorasBoss(); return; }
+    if(lastStoryFight === 'father'){
+      startGame();
+      setTimeout(()=>{ if(running) startBoss(); }, 300);
+      return;
+    }
     startGame();
-    setTimeout(()=>{ if(running) startBoss(); }, 300);
     return;
   }
-  if(!net.active){ leaveMultiplayer(); startGame(); return; }
-  const oldBoss = boss && boss.hp > 0 ? {x:boss.x,y:boss.y,hp:boss.hp,maxHp:boss.maxHp,phase:bossPhase} : null;
-  startGame(); startBoss();
-  if(net.host && oldBoss){ Object.assign(boss, oldBoss); bossPhase = oldBoss.phase; }
+  // ===== МУЛЬТИПЛЕЕР: остаёмся в комнате, респавн =====
+  // не вызываем leaveMultiplayer
+  const keepRoom = net.room;
+  const keepId = net.id;
+  const wasHost = net.host;
+  const keepCfg = net.config;
+  startGame();
+  // восстановить net флаги если startGame что-то сбросил
+  net.active = true;
+  net.room = keepRoom;
+  net.id = keepId;
+  net.host = wasHost;
+  net.config = keepCfg;
+  if(bossMods && bossMods.skipToBoss){
+    startBoss();
+  } else {
+    // обычный старт → босс по таймеру как в startGame
+    setTimeout(()=>{ if(running && net.active && !bossMode) startBoss(); }, 150);
+  }
   sendNet({type:'state',x:player.x,y:player.y,hp:player.hp,alive:true});
+  if(typeof roomHudEl !== 'undefined' && roomHudEl){
+    roomHudEl.textContent = '🌐 ' + net.room + (wasHost ? ' · хост' : '');
+  }
 };
 
 function startBoss(){
@@ -3362,12 +3427,24 @@ function die(reason){
   ft.textContent=`Ты продержался ${time.toFixed(1)} сек`;
   const customTexts = mods.deathTexts || [];
   const finalReason = reason || (customTexts.length ? customTexts[Math.floor(Math.random()*customTexts.length)] : 'Тебя настигли');
-  goReason.textContent = finalReason;
-  document.getElementById('go').classList.remove('hidden');
+  goReason.textContent = finalReason + (net.active ? ('  ·  комната ' + (net.room||'')) : '');
   document.getElementById('bossHp').style.display='none';
   statusEl.textContent='ПОЙМАН'; statusEl.style.color='#f44';
   shake=28;
   for(let i=0;i<18;i++) spawnP(player.x,player.y,`hsl(${Math.random()*40},100%,50%)`,6);
+  try {
+    document.getElementById('ui').classList.add('hidden');
+    document.getElementById('mctrl').style.display = 'none';
+    document.getElementById('shootBtn').style.display = 'none';
+    const db=document.getElementById('dashBtn'); if(db) db.style.display='none';
+    if(typeof joyZone!=='undefined' && joyZone) joyZone.style.display='none';
+  } catch(e){}
+  // мультиплеер: НЕ leaveMultiplayer — только экран смерти
+  showScreen('go');
+  try {
+    const ba = document.getElementById('btnAgain');
+    if(ba) ba.textContent = net.active ? 'ЕЩЁ РАЗ (В КОМНАТЕ)' : 'ЕЩЁ РАЗ';
+  } catch(e){}
 }
 
 function update(){
