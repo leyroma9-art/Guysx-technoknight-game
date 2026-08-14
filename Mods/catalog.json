@@ -9,7 +9,7 @@
       "desc": "Тестовый ИИ мод.",
       "version": "1.0.0",
       "tags": ["demo", "ui"],
-      "file": "mods/horror/ai_path_mod3.js"
+      "file": "mods/horror/ai_path_mod-3.js"
     }
   ]
 }
