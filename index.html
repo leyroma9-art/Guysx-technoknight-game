@@ -2,6 +2,10 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="tk-build" content="2026-08-14-mp3">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>УБЕГАЙ ОТ ТЕХНОКНАЙТА</title>
@@ -518,6 +522,20 @@ body.ios-mode .btn, body.ios-mode #shootBtn, body.ios-mode #joystickZone{
       <textarea id="modDeathTexts" rows="5" style="width:100%;padding:10px;border-radius:10px;border:1px solid #444;background:#1a1a1a;color:#fff;font-size:13px;resize:vertical"></textarea>
     </div>
 
+
+
+    <div class="mod-section">Библиотека модов (с сервера)</div>
+    <div class="settings-row">
+      <label style="color:#aaa;font-size:12px;line-height:1.45;display:block;margin-bottom:8px">
+        Каталог грузится с <b style="color:#8cf">вашего сервера</b> (<code>/Mods/catalog.json</code>).
+        При обновлении GitHub/Render список сам подтягивается — ничего не пропадает.
+      </label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <button type="button" id="btnModLibRefresh" style="font-size:13px;padding:10px 14px;border-radius:12px;border:1px solid #4af;background:#152a2a;color:#fff;cursor:pointer">🔄 Обновить каталог</button>
+        <span id="modLibStatus" style="font-size:12px;color:#888;align-self:center">—</span>
+      </div>
+      <div id="modLibList" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto"></div>
+    </div>
 
     <div class="mod-section">Пользовательский код (JS-моды)</div>
     <div class="settings-row">
@@ -2348,6 +2366,139 @@ document.getElementById('btnClearCustomCode').onclick = () => {
     _compiled: false, _error: null, _listeners: {}, _gameData: (userMod && userMod._gameData) || {}
   };
 };
+
+
+// ===== MOD LIBRARY (server catalog) =====
+const MOD_CATALOG_URLS = [
+  '/Mods/catalog.json',
+  'Mods/catalog.json',
+  'https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/Mods/catalog.json'
+];
+let modCatalogCache = null;
+
+function modFileUrl(file){
+  if(!file) return '';
+  if(/^https?:\/\//i.test(file)) return file;
+  // normalize: catalog may say "Mods/Horror/x.js" or "Horror/x.js"
+  let f = String(file).replace(/^\.\//,'');
+  if(!f.startsWith('Mods/') && !f.startsWith('/Mods/')) f = 'Mods/' + f.replace(/^\/+/, '');
+  if(f.startsWith('/')) return f;
+  return '/' + f;
+}
+
+async function fetchTextNoCache(url){
+  const u = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+  const r = await fetch(u, { cache: 'no-store', credentials: 'omit' });
+  if(!r.ok) throw new Error('HTTP ' + r.status + ' ' + url);
+  return await r.text();
+}
+
+async function loadModCatalog(force){
+  const st = document.getElementById('modLibStatus');
+  const list = document.getElementById('modLibList');
+  if(st) st.textContent = 'Загрузка…';
+  if(list) list.innerHTML = '';
+  let lastErr = null;
+  for(const base of MOD_CATALOG_URLS){
+    try{
+      const txt = await fetchTextNoCache(base);
+      const data = JSON.parse(txt);
+      if(!data || !Array.isArray(data.mods)) throw new Error('bad catalog');
+      modCatalogCache = data;
+      renderModCatalog(data);
+      if(st) st.textContent = '✓ ' + data.mods.length + ' модов · ' + (data.updated||'') + ' · ' + base.split('?')[0];
+      try{ localStorage.setItem('tk_mod_catalog', JSON.stringify(data)); }catch(e){}
+      return data;
+    }catch(e){ lastErr = e; }
+  }
+  // offline fallback from localStorage
+  try{
+    const raw = localStorage.getItem('tk_mod_catalog');
+    if(raw){
+      const data = JSON.parse(raw);
+      modCatalogCache = data;
+      renderModCatalog(data);
+      if(st) st.textContent = '⚠ офлайн-кэш · ' + (data.mods||[]).length + ' модов';
+      return data;
+    }
+  }catch(e){}
+  if(st) st.textContent = 'Ошибка: ' + (lastErr && lastErr.message ? lastErr.message : 'нет каталога');
+  if(list) list.innerHTML = '<div style="color:#f88;font-size:12px">Не удалось загрузить /Mods/catalog.json. Проверь, что папка Mods есть на сервере (Render/GitHub).</div>';
+  return null;
+}
+
+function renderModCatalog(data){
+  const list = document.getElementById('modLibList');
+  if(!list) return;
+  const mods = data.mods || [];
+  if(!mods.length){ list.innerHTML = '<div style="color:#888">Пусто</div>'; return; }
+  list.innerHTML = mods.map(function(m){
+    const tags = (m.tags||[]).map(function(t){ return '<span style="background:#222;border:1px solid #444;border-radius:6px;padding:1px 6px;font-size:10px;color:#aaa;margin-right:4px">'+t+'</span>'; }).join('');
+    return '<div style="background:#151515;border:1px solid #333;border-radius:12px;padding:10px;text-align:left">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
+      +'<div><b style="color:#fff">'+(m.name||m.id)+'</b> <span style="color:#666;font-size:11px">v'+(m.version||'?')+'</span><br>'
+      +'<span style="color:#888;font-size:12px">'+(m.desc||'')+'</span><br>'+tags+'</div>'
+      +'<button type="button" class="mod-lib-dl" data-id="'+String(m.id||'').replace(/"/g,'')+'" style="flex-shrink:0;padding:8px 12px;border-radius:10px;border:1px solid #4a4;background:#1a2a1a;color:#8f8;font-size:12px;font-weight:700;cursor:pointer">Скачать</button>'
+      +'</div></div>';
+  }).join('');
+  list.querySelectorAll('.mod-lib-dl').forEach(function(btn){
+    btn.onclick = function(){ downloadCatalogMod(btn.getAttribute('data-id'), btn); };
+  });
+}
+
+async function downloadCatalogMod(id, btn){
+  const data = modCatalogCache;
+  if(!data) return;
+  const m = (data.mods||[]).find(function(x){ return x.id === id; });
+  if(!m){ alert('Мод не найден'); return; }
+  if(btn){ btn.disabled = true; btn.textContent = '…'; }
+  const paths = [];
+  const file = modFileUrl(m.file);
+  paths.push(file);
+  // also try without leading slash relative
+  if(file.startsWith('/')) paths.push(file.slice(1));
+  // github raw fallback
+  const gh = 'https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/' + String(m.file||'').replace(/^\//,'');
+  paths.push(gh);
+  let code = null, used = null, err = null;
+  for(const u of paths){
+    try{
+      code = await fetchTextNoCache(u);
+      if(code && code.length > 20){ used = u; break; }
+    }catch(e){ err = e; }
+  }
+  if(!code){
+    if(btn){ btn.disabled = false; btn.textContent = 'Скачать'; }
+    alert('Не скачалось: ' + (err && err.message ? err.message : m.file));
+    return;
+  }
+  const name = (m.id || 'mod') + '.js';
+  if(!Array.isArray(mods.customMods)) mods.customMods = [];
+  const existing = mods.customMods.findIndex(function(x){ return x.name === name; });
+  if(existing >= 0) mods.customMods[existing] = { name: name, code: code };
+  else mods.customMods.push({ name: name, code: code });
+  mods.customCode = mods.customMods.map(function(x){ return x.code||''; }).join('\n;\n');
+  mods.customCodeFileName = mods.customMods.map(function(x){ return x.name; }).filter(Boolean).join(', ');
+  try{
+    if(typeof rebuildCustomCodeFromMods === 'function') rebuildCustomCodeFromMods();
+    if(typeof updateModCodeFileInfo === 'function') updateModCodeFileInfo();
+    if(typeof compileUserMod === 'function') compileUserMod();
+    localStorage.setItem('tk_mods', JSON.stringify(mods));
+  }catch(e){ console.warn(e); }
+  if(btn){ btn.disabled = false; btn.textContent = '✓'; setTimeout(function(){ btn.textContent = 'Скачать'; }, 1200); }
+  console.log('[modlib] installed', name, 'from', used, code.length);
+}
+
+// wire refresh + auto load when opening mods
+(function setupModLib(){
+  document.getElementById('btnModLibRefresh')?.addEventListener('click', function(){ loadModCatalog(true); });
+  const old = document.getElementById('btnMods')?.onclick;
+  const btn = document.getElementById('btnMods');
+  if(btn){
+    btn.addEventListener('click', function(){ setTimeout(function(){ loadModCatalog(false); }, 50); });
+  }
+})();
+
 
 document.getElementById('btnMods').onclick = () => { loadModsToUI(); showScreen('modsScreen'); setTimeout(applyPlatformMode, 30); };
 document.getElementById('btnModsBack').onclick = () => showScreen('mainMenu');
@@ -7721,6 +7872,19 @@ c.addEventListener('contextmenu',e=>e.preventDefault());
     inp.addEventListener('touchstart', function(e){ e.stopPropagation(); }, {passive:true});
   }
   if(conf) conf.onclick = function(e){ e.preventDefault(); e.stopPropagation(); confirmUserBossPick(); };
+})();
+
+
+// soft rebuild hint (no forced wipe of player data)
+(function(){
+  const BUILD = document.querySelector('meta[name="tk-build"]')?.content || '';
+  try{
+    const prev = localStorage.getItem('tk_build');
+    if(prev && BUILD && prev !== BUILD){
+      console.log('[tk] new build', prev, '->', BUILD);
+    }
+    if(BUILD) localStorage.setItem('tk_build', BUILD);
+  }catch(e){}
 })();
 
 </script>

@@ -11,7 +11,27 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-app.use(express.static(path.join(__dirname)));
+// HTML/JSON/JS — без долгого кэша, чтобы обновления доходили без Ctrl+F5
+app.use((req, res, next) => {
+  const p = req.path || '';
+  if (p === '/' || p.endsWith('.html') || p.endsWith('.json') || p.endsWith('.js') || p.endsWith('.css')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else {
+    res.setHeader('Cache-Control', 'public, max-age=300');
+  }
+  next();
+});
+app.use(express.static(path.join(__dirname), {
+  etag: true,
+  lastModified: true,
+  setHeaders(res, filePath) {
+    if (/\.(html|json|js|css)$/i.test(filePath) || filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 
 // code -> { clients: Map(id, {ws, name}), config, open, hostId }
 const rooms = new Map();
