@@ -2515,13 +2515,27 @@ async function downloadCatalogMod(id, btn){
   if(!m){ alert('Мод не найден'); return; }
   if(btn){ btn.disabled = true; btn.textContent = '…'; }
   const paths = [];
-  const file = modFileUrl(m.file);
-  paths.push(file);
-  // also try without leading slash relative
-  if(file.startsWith('/')) paths.push(file.slice(1));
-  // github raw fallback
-  const gh = 'https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/' + String(m.file||'').replace(/^\//,'');
-  paths.push(gh);
+  const rawFile = String(m.file || '').replace(/^\.\//,'').replace(/^\/+/,'');
+  // варианты путей: в репо файлы лежат в Mods/Mods/Horror/...
+  const rels = [];
+  const add = function(x){ if(x && rels.indexOf(x)<0) rels.push(x); };
+  add(rawFile);
+  add(rawFile.replace(/^Mods\//,''));
+  if(rawFile.indexOf('Mods/Mods/') !== 0){
+    if(rawFile.indexOf('Mods/') === 0) add('Mods/Mods/' + rawFile.slice(5));
+    else add('Mods/Mods/' + rawFile);
+  }
+  if(rawFile.indexOf('Horror/') >= 0){
+    const h = rawFile.slice(rawFile.indexOf('Horror/'));
+    add('Mods/Horror/' + h.replace(/^Horror\//,''));
+    add('Mods/Mods/Horror/' + h.replace(/^Horror\//,''));
+  }
+  rels.forEach(function(rel){
+    paths.push('/' + rel);
+    paths.push(rel);
+    paths.push('https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/' + rel);
+    paths.push('https://cdn.jsdelivr.net/gh/leyroma9-art/Guysx-technoknight-game@main/' + rel);
+  });
   let code = null, used = null, err = null;
   for(const u of paths){
     try{
