@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "updated": "2026-08-14",
   "mods": [
     {
@@ -8,8 +8,11 @@
       "author": "guysx",
       "desc": "Слух, стены глушат звук, погоня, NavMesh",
       "version": "3.0.0",
-      "tags": ["ai", "horror"],
-      "file": "Mods/Horror/ai_path_mod-3.js"
+      "tags": [
+        "ai",
+        "horror"
+      ],
+      "file": "Mods/Mods/Horror/ai_path_mod-3.js"
     },
     {
       "id": "flashlight",
@@ -17,8 +20,11 @@
       "author": "guysx",
       "desc": "Конус света по направлению движения, мерцание у NPC",
       "version": "2.0.0",
-      "tags": ["dark", "horror"],
-      "file": "Mods/Horror/dark_flashlight_mod-2.js"
+      "tags": [
+        "dark",
+        "horror"
+      ],
+      "file": "Mods/Mods/Horror/dark_flashlight_mod-2.js"
     },
     {
       "id": "monastery",
@@ -26,8 +32,11 @@
       "author": "guysx",
       "desc": "Карта 2500x2500, комнаты и крыши",
       "version": "6.0.0",
-      "tags": ["map", "horror"],
-      "file": "Mods/Horror/monastery_mod-6.js"
+      "tags": [
+        "map",
+        "horror"
+      ],
+      "file": "Mods/Mods/Horror/monastery_mod-6.js"
     },
     {
       "id": "dark-horror",
@@ -35,8 +44,10 @@
       "author": "guysx",
       "desc": "Сильная тьма, враги вне света скрыты",
       "version": "1.0.0",
-      "tags": ["dark"],
-      "file": "Mods/Horror/dark_horror_mod.js"
+      "tags": [
+        "dark"
+      ],
+      "file": "Mods/Mods/Horror/dark_horror_mod.js"
     },
     {
       "id": "dark-lantern",
@@ -44,8 +55,10 @@
       "author": "guysx",
       "desc": "Круглый свет вокруг игрока",
       "version": "1.0.0",
-      "tags": ["dark"],
-      "file": "Mods/Horror/dark_lantern_mod.js"
+      "tags": [
+        "dark"
+      ],
+      "file": "Mods/Mods/Horror/dark_lantern_mod.js"
     },
     {
       "id": "dark-night",
@@ -53,8 +66,10 @@
       "author": "guysx",
       "desc": "Лёгкое ночное затемнение",
       "version": "1.0.0",
-      "tags": ["dark"],
-      "file": "Mods/Horror/dark_night_mod.js"
+      "tags": [
+        "dark"
+      ],
+      "file": "Mods/Mods/Horror/dark_night_mod.js"
     },
     {
       "id": "dark-pulse",
@@ -62,8 +77,10 @@
       "author": "guysx",
       "desc": "Пульсирующий свет",
       "version": "1.0.0",
-      "tags": ["dark"],
-      "file": "Mods/Horror/dark_pulse_mod.js"
+      "tags": [
+        "dark"
+      ],
+      "file": "Mods/Mods/Horror/dark_pulse_mod.js"
     }
   ]
 }
