@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "updated": "2026-08-14",
+  "mods": [
+    {
+      "id": "banner-hello",
+      "name": "Приветствие",
+      "author": "guysx",
+      "desc": "Показывает баннер при старте раунда. Тестовый мод.",
+      "version": "1.0.0",
+      "tags": ["demo", "ui"],
+      "file": "mods/banner-hello/mod.js"
+    },
+    {
+      "id": "double-ammo",
+      "name": "Двойные патроны",
+      "author": "guysx",
+      "desc": "В начале игры и при подборе даёт больше патронов.",
+      "version": "1.0.0",
+      "tags": ["weapon", "easy"],
+      "file": "mods/double-ammo/mod.js"
+    },
+    {
+      "id": "speed-boost",
+      "name": "Ускорение",
+      "author": "guysx",
+      "desc": "Игрок бегает быстрее. Работает и в соло, и в мультиплеере.",
+      "version": "1.0.0",
+      "tags": ["player", "movement"],
+      "file": "mods/speed-boost/mod.js"
+    }
+  ]
+}
