@@ -153,24 +153,51 @@ function connectRoom(rawCode, create){
     if(data.type === 'welcome'){
       net.active = true; net.room = data.room; net.id = data.id; net.host = data.host;
       net.config = data.config || {};
-      net.savedMods = {...mods, customCode: mods.customCode}; net.savedBossMods = {...bossMods, atkWeights:[...(bossMods.atkWeights||[])]};
-      if(net.config.v1){
-        Object.assign(mods, net.config.v1);
-        if(typeof net.config.v1.customCode === 'string'){
-          mods.customCode = net.config.v1.customCode;
-          if(mods.customCode){
-            mods.customCodeFileName = 'host-mod.js';
-            mods.customMods = [{ name: 'host-mod.js', code: mods.customCode }];
+      // mode ДО startGame, иначе skipNpc/HUD не видят userboss/empty
+      window.mpMode = (net.config && net.config.mode) || 'boss';
+      try {
+        net.savedMods = {...mods, customCode: mods.customCode};
+        net.savedBossMods = {...bossMods, atkWeights:[...(bossMods.atkWeights||[])]};
+      } catch(e){ console.warn('[net] save mods', e); }
+      try {
+        if(net.config.v1){
+          Object.assign(mods, net.config.v1);
+          if(typeof net.config.v1.customCode === 'string'){
+            mods.customCode = net.config.v1.customCode;
+            if(mods.customCode){
+              mods.customCodeFileName = 'host-mod.js';
+              mods.customMods = [{ name: 'host-mod.js', code: mods.customCode }];
+            }
           }
         }
-      }
-      if(net.config.v2) Object.assign(bossMods, net.config.v2);
-      if(net.config.giants) mods.playerSize = 30;
-      // compile host custom code on EVERY client so banners/content match
+        if(net.config.v2) Object.assign(bossMods, net.config.v2);
+        if(net.config.giants) mods.playerSize = 30;
+      } catch(e){ console.warn('[net] apply config', e); }
       try { compileUserMod(); } catch(e){ console.error('[net] mod compile', e); }
-      status.textContent = `Комната ${data.room}: вход…` + (mods.customCode ? ' · мод-код загружен' : '');
-      startGame();
-      setTimeout(() => { if(running) beginMultiplayerMode(net.config && net.config.mode); }, 120);
+      // сразу прячем меню комнаты — даже если startGame упадёт
+      try {
+        var rs = document.getElementById('roomScreen');
+        if(rs) rs.classList.add('hidden');
+        stopRoomListPoll();
+      } catch(e){}
+      status.textContent = 'Комната '+data.room+': вход…' + (mods && mods.customCode ? ' · мод-код' : '');
+      try {
+        startGame();
+      } catch(e){
+        console.error('[net] startGame', e);
+        status.textContent = 'Ошибка старта: ' + (e && e.message ? e.message : e);
+        return;
+      }
+      setTimeout(function(){
+        try {
+          if(typeof running !== 'undefined' && running){
+            beginMultiplayerMode(window.mpMode || (net.config && net.config.mode) || 'boss');
+          }
+        } catch(e){
+          console.error('[net] beginMode', e);
+          if(status) status.textContent = 'Ошибка режима: ' + (e && e.message ? e.message : e);
+        }
+      }, 120);
     } else if(data.type === 'modcode'){
       // live code push — у всех в комнате, даже без файлов
       if(typeof data.code === 'string'){
