@@ -1320,9 +1320,14 @@ function beginMultiplayerMode(mode){
   mpMode = mode || 'boss';
   userBoss = { active:false, bossId:null, isMe:false, abilities:[], cd:{}, pickDone:false, name:'' };
   hideMpExtras();
-  if(mpMode === 'empty') startEmptyRoom();
-  else if(mpMode === 'userboss') startUserBossFlow();
-  else if(running && !bossMode) startBoss();
+  if(mpMode === 'empty'){
+    startEmptyRoom();
+  } else if(mpMode === 'userboss'){
+    enemies = [];
+    startUserBossFlow();
+  } else if(running && !bossMode){
+    startBoss();
+  }
 }
 
 function hideMpExtras(){
@@ -1334,13 +1339,17 @@ function hideMpExtras(){
 }
 
 function startEmptyRoom(){
-  bossMode = false; boss = null; enemies = [];
-  if(statusEl){ statusEl.textContent = '🏠 Пустая комната'; statusEl.style.color = '#8cf'; }
+  bossMode = false; boss = null;
+  enemies = []; shitBalls = []; bigShits = []; puddles = []; tarantulas = [];
+  cumShots = []; lasers = []; phantoms = []; npcMarkers = [];
+  if(statusEl){ statusEl.textContent = '🏠 Пустая комната · без NPC и босса'; statusEl.style.color = '#8cf'; }
   if(bossHpEl) bossHpEl.style.display = 'none';
   const btn = document.getElementById('mpMenuBtn');
   if(btn) btn.style.display = 'flex';
   applyChatLayout();
   showChat(true);
+  // prevent classic timer boss
+  try { time = 0; } catch(e){}
 }
 
 function applyChatLayout(){
@@ -1422,11 +1431,22 @@ function openUserBossPick(){
   const scr = document.getElementById('userBossPick');
   const list = document.getElementById('ubPickList');
   if(!scr||!list) return;
+  // clear enemies while picking
+  enemies = [];
   list.innerHTML = UB_ABILITIES.map(function(a){
     return '<label style="display:flex;gap:10px;align-items:flex-start;background:#1a1a1a;border:1px solid #444;border-radius:12px;padding:10px;cursor:pointer">'
       +'<input type="checkbox" data-ub="'+a.id+'" style="width:18px;height:18px;margin-top:2px;accent-color:#f44">'
       +'<span><b style="color:#fff">'+a.name+'</b><br><span style="color:#888;font-size:12px">'+a.desc+'</span></span></label>';
   }).join('');
+  list.querySelectorAll('input[data-ub]').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      const checked = list.querySelectorAll('input[data-ub]:checked');
+      if(checked.length > 4){
+        cb.checked = false;
+        if(statusEl){ statusEl.textContent='Максимум 4 способности'; statusEl.style.color='#f88'; }
+      }
+    });
+  });
   scr.classList.remove('hidden');
 }
 
@@ -1459,11 +1479,15 @@ function onUserBossAbilitiesReady(bossId, abilities, name){
   userBoss.pickDone = true;
   userBoss.name = name || userBoss.name || 'Босс';
 
+  enemies = [];
   if(!bossMode) startBoss();
   if(boss){
     boss.userControlled = true;
     boss.r = 55;
     boss.hp = boss.maxHp = Math.max(boss.maxHp||630, 800);
+    boss.lastTeleport = performance.now() + 999999;
+    boss.lastPhantom = performance.now() + 999999;
+    boss.lastNpcSpawn = performance.now() + 999999;
   }
   // stop pure AI spam for user boss: mark phase
   if(userBoss.isMe){
@@ -3107,11 +3131,14 @@ function startGame(){
     stun: 0
   };
   enemies = [];
-  const count = Math.min(8, mods.npcCount || 1);
-  for(let i=0;i<count;i++){
-    const a = Math.random()*Math.PI*2;
-    const dist = 700 + Math.random()*400;
-    enemies.push(makeEnemy(player.x+Math.cos(a)*dist, player.y+Math.sin(a)*dist, 1));
+  const skipNpc = (typeof mpMode !== 'undefined' && (mpMode === 'empty' || mpMode === 'userboss'));
+  if(!skipNpc){
+    const count = Math.min(8, mods.npcCount || 1);
+    for(let i=0;i<count;i++){
+      const a = Math.random()*Math.PI*2;
+      const dist = 700 + Math.random()*400;
+      enemies.push(makeEnemy(player.x+Math.cos(a)*dist, player.y+Math.sin(a)*dist, 1));
+    }
   }
   particles=[]; bullets=[]; shitBalls=[]; bigShits=[]; puddles=[]; guns=[];
   tarantulas=[]; cumShots=[]; lasers=[]; phantoms=[]; npcMarkers=[]; medkits=[]; medkitCd=0; healFx=[];
@@ -3133,8 +3160,7 @@ function startGame(){
   modSolids = []; invalidateSolidGrid();
   // sprites stay cached in memory between runs
   runUserHook('onStart');
-  if(bossMods && bossMods.skipToBoss){
-    // jump straight to boss fight
+  if(bossMods && bossMods.skipToBoss && !(typeof mpMode!=='undefined' && (mpMode==='empty'||mpMode==='userboss'))){
     setTimeout(() => { if(running && !bossMode) startBoss(); }, 400);
   }
 }
@@ -3160,19 +3186,18 @@ document.getElementById('btnAgain').onclick = () => {
   const keepId = net.id;
   const wasHost = net.host;
   const keepCfg = net.config;
+  const mode = (keepCfg && keepCfg.mode) || (typeof mpMode!=='undefined' ? mpMode : 'boss');
+  mpMode = mode;
   startGame();
-  // восстановить net флаги если startGame что-то сбросил
   net.active = true;
   net.room = keepRoom;
   net.id = keepId;
   net.host = wasHost;
   net.config = keepCfg;
-  if(bossMods && bossMods.skipToBoss){
-    startBoss();
-  } else {
-    // обычный старт → босс по таймеру как в startGame
-    setTimeout(()=>{ if(running && net.active && !bossMode) startBoss(); }, 150);
-  }
+  setTimeout(function(){
+    if(!running || !net.active) return;
+    beginMultiplayerMode(mode);
+  }, 120);
   sendNet({type:'state',x:player.x,y:player.y,hp:player.hp,alive:true});
   if(typeof roomHudEl !== 'undefined' && roomHudEl){
     roomHudEl.textContent = '🌐 ' + net.room + (wasHost ? ' · хост' : '');
@@ -3895,9 +3920,14 @@ function update(){
   cam.x += (player.x - viewW/2 - cam.x) * 0.13;
   cam.y += (player.y - viewH/2 - cam.y) * 0.13;
 
-  // trigger boss
-  if(!bossMode && time >= BOSS_TIME){
+  // trigger boss (not in empty / until user-boss ready)
+  if(!bossMode && time >= BOSS_TIME && !(typeof mpMode!=='undefined' && mpMode==='empty') && !(typeof mpMode!=='undefined' && mpMode==='userboss')){
     startBoss();
+  }
+  // empty room: strip any NPC that slipped in
+  if(typeof mpMode!=='undefined' && mpMode==='empty'){
+    if(enemies.length) enemies.length = 0;
+    if(shitBalls.length) shitBalls.length = 0;
   }
 
   // puddles
@@ -3912,7 +3942,7 @@ function update(){
   puddles=puddles.filter(p=>p.life>0);
 
   // ===== NORMAL ENEMIES (also during boss if spawned) =====
-  if(!bossMode || enemies.length){
+  if((typeof mpMode==='undefined' || mpMode!=='empty') && (!bossMode || enemies.length)){
     for(let ei=enemies.length-1;ei>=0;ei--){
       const e=enemies[ei];
       if(e.stun>0){e.stun--;continue;}
@@ -3951,8 +3981,8 @@ function update(){
       }
       if(e.touchCd > 0) e.touchCd--;
     }
-    // auto-respawn only outside boss fight
-    if(!bossMode && enemies.length===0){
+    // auto-respawn only outside boss fight and not empty/userboss lobby
+    if(!bossMode && enemies.length===0 && !(typeof mpMode!=='undefined' && (mpMode==='empty'||mpMode==='userboss'))){
       const a=Math.random()*Math.PI*2;
       enemies.push(makeEnemy(player.x+Math.cos(a)*900,player.y+Math.sin(a)*900,1));
     }
@@ -3980,6 +4010,35 @@ function update(){
   // ===== BOSS =====
   if(bossMode && boss && !makmarMode && !(typeof sidorasMode !== 'undefined' && sidorasMode) && !(typeof royalMode !== 'undefined' && royalMode)){
     if(bossIntro>0){ bossIntro--; }
+    else if(boss.userControlled){
+      // player-driven boss: move with stick / keys, no AI attacks
+      if(userBoss && userBoss.isMe){
+        let mx=0,my=0;
+        if(keys['w']||keys['ц']||keys['arrowup']||mdir.u) my-=1;
+        if(keys['s']||keys['ы']||keys['arrowdown']||mdir.d) my+=1;
+        if(keys['a']||keys['ф']||keys['arrowleft']||mdir.l) mx-=1;
+        if(keys['d']||keys['в']||keys['arrowright']||mdir.r) mx+=1;
+        try {
+          if(typeof joyVec!=='undefined' && joyVec){ mx += joyVec.x||0; my += joyVec.y||0; }
+        } catch(e){}
+        const len=Math.hypot(mx,my)||1;
+        if(len>0.12){
+          const sp = boss.charging ? 11 : 4.2;
+          boss.x += (mx/len)*sp;
+          boss.y += (my/len)*sp;
+        }
+        if(boss.charging){
+          boss.x += boss.chargeVx||0; boss.y += boss.chargeVy||0;
+          boss.chargeTime = (boss.chargeTime||0)-1;
+          if(boss.chargeTime<=0){ boss.charging=false; boss.chargeVx=0; boss.chargeVy=0; }
+        }
+        boss.x=Math.max(boss.r,Math.min(world-boss.r,boss.x));
+        boss.y=Math.max(boss.r,Math.min(world-boss.r,boss.y));
+        // body follow for camera: player rides boss
+        player.x = boss.x; player.y = boss.y;
+        player.hp = 100; // boss player doesn't die as hunter
+      }
+    }
     else {
       const dx=player.x-boss.x, dy=player.y-boss.y, dist=Math.hypot(dx,dy)||1;
       const nowT = now;
