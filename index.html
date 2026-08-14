@@ -1122,7 +1122,10 @@ function removeIOSSteppers(){
 setTimeout(applyPlatformMode, 50);
 
 function showScreen(id){
-  ['mainMenu','roomScreen','settingsScreen','go','newsScreen','modsScreen','mods2Screen','saveSlots','makmarWin','sidorasWin','royalChoice','royalCuckEnd','royalWin'].forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+  ['mainMenu','roomScreen','settingsScreen','go','newsScreen','modsScreen','mods2Screen','saveSlots','makmarWin','sidorasWin','royalChoice','royalCuckEnd','royalWin'].forEach(function(s){
+    var el = document.getElementById(s);
+    if(el) el.classList.toggle('hidden', s !== id);
+  });
 }
 document.getElementById('btnMultiplayer').onclick = () => {
   document.getElementById('playerNameInput').value = localStorage.getItem('tk_playerName') || 'Игрок';
@@ -2781,7 +2784,7 @@ function startGame(){
     stun: 0
   };
   enemies = [];
-  const skipNpc = (typeof mpMode !== 'undefined' && (window.mpMode === 'empty' || window.mpMode === 'userboss'));
+  const skipNpc = (window.mpMode === 'empty' || window.mpMode === 'userboss');
   if(!skipNpc){
     const count = Math.min(8, mods.npcCount || 1);
     for(let i=0;i<count;i++){
@@ -2796,6 +2799,7 @@ function startGame(){
   shake=0; lastShot=0; lastGunSpawn=0;
   t0=performance.now(); time=0; running=true;
   showScreen(null);
+  try { document.getElementById('roomScreen').classList.add('hidden'); } catch(e){}
   document.getElementById('mainMenu').classList.add('hidden');
   document.getElementById('settingsScreen').classList.add('hidden');
   document.getElementById('go').classList.add('hidden');
@@ -2809,8 +2813,8 @@ function startGame(){
   for(let i=0;i<3;i++) spawnMedkit(false);
   modSolids = []; invalidateSolidGrid();
   // sprites stay cached in memory between runs
-  runUserHook('onStart');
-  if(bossMods && bossMods.skipToBoss && !(typeof mpMode!=='undefined' && (window.mpMode==='empty'||window.mpMode==='userboss'))){
+  try { runUserHook('onStart'); } catch(e){ console.warn('onStart', e); }
+  if(bossMods && bossMods.skipToBoss && !(window.mpMode==='empty'||window.mpMode==='userboss')){
     setTimeout(() => { if(running && !bossMode) startBoss(); }, 400);
   }
 }
