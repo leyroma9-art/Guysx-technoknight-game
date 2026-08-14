@@ -207,6 +207,12 @@ body.ios-mode .btn, body.ios-mode #shootBtn, body.ios-mode #joystickZone{
         <input class="room-code" type="text" id="roomCodeInput" maxlength="8" autocapitalize="characters" autocomplete="off" placeholder="ABCD" style="padding:9px 12px;font-size:15px">
       </div>
       <div class="settings-row" style="margin:6px 0">
+        <label style="margin-bottom:6px;font-size:12px">Режим комнаты</label>
+        <label class="room-opt"><input type="radio" name="roomMode" value="boss" id="roomModeBoss" checked style="width:18px;height:18px;accent-color:#f44"> ⚔ Босс (классика)</label>
+        <label class="room-opt"><input type="radio" name="roomMode" value="userboss" id="roomModeUserBoss" style="width:18px;height:18px;accent-color:#f44"> 👑 Юзер-босс</label>
+        <label class="room-opt"><input type="radio" name="roomMode" value="empty" id="roomModeEmpty" style="width:18px;height:18px;accent-color:#f44"> 🏠 Пустая комната (чат)</label>
+      </div>
+      <div class="settings-row" style="margin:6px 0">
         <label style="margin-bottom:4px;font-size:12px">Настройки новой комнаты</label>
         <label class="room-opt"><input type="checkbox" id="roomOpen" checked style="width:18px;height:18px;accent-color:#f44"> 🌐 Открытая (в списке)</label>
         <label class="room-opt"><input type="checkbox" id="roomMods1" checked style="width:18px;height:18px;accent-color:#f44"> Модификаторы v1</label>
@@ -512,16 +518,6 @@ body.ios-mode .btn, body.ios-mode #shootBtn, body.ios-mode #joystickZone{
       <textarea id="modDeathTexts" rows="5" style="width:100%;padding:10px;border-radius:10px;border:1px solid #444;background:#1a1a1a;color:#fff;font-size:13px;resize:vertical"></textarea>
     </div>
 
-
-
-    <div class="mod-section">Библиотека модов (онлайн)</div>
-    <div class="settings-row">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-        <button type="button" id="btnLibRefresh" style="font-size:13px;padding:10px 14px;border-radius:12px;border:1px solid #4a6;background:#152a18;color:#cfc;cursor:pointer">🔄 Обновить список</button>
-      </div>
-      <div id="modLibStatus" style="font-size:12px;color:#888;margin-bottom:8px;text-align:left">Нажми «Обновить», чтобы загрузить каталог</div>
-      <div id="modLibList" style="display:flex;flex-direction:column;gap:8px;max-height:min(360px,40vh);overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
-    </div>
 
     <div class="mod-section">Пользовательский код (JS-моды)</div>
     <div class="settings-row">
@@ -1070,6 +1066,54 @@ document.getElementById('btnMultiplayer').onclick = () => {
   startRoomListPoll();
 };
 document.getElementById('btnRoomBack').onclick = () => { stopRoomListPoll(); leaveMultiplayer(); showScreen('mainMenu'); };
+
+document.getElementById('mpMenuBtn')?.addEventListener('click', () => document.getElementById('mpPauseMenu')?.classList.remove('hidden'));
+document.getElementById('btnMpContinue')?.addEventListener('click', () => document.getElementById('mpPauseMenu')?.classList.add('hidden'));
+document.getElementById('btnMpChatSettings')?.addEventListener('click', () => {
+  document.getElementById('mpPauseMenu')?.classList.add('hidden');
+  const s = chatSettings;
+  if(document.getElementById('chatPos')) document.getElementById('chatPos').value = s.pos||'bl';
+  if(document.getElementById('chatW')){ document.getElementById('chatW').value=s.w||280; document.getElementById('chatWVal').textContent=document.getElementById('chatW').value; }
+  if(document.getElementById('chatH')){ document.getElementById('chatH').value=s.h||140; document.getElementById('chatHVal').textContent=document.getElementById('chatH').value; }
+  if(document.getElementById('chatFont')){ document.getElementById('chatFont').value=s.font||13; document.getElementById('chatFontVal').textContent=document.getElementById('chatFont').value; }
+  if(document.getElementById('chatShow')) document.getElementById('chatShow').checked = s.show!==false;
+  document.getElementById('mpChatSettings')?.classList.remove('hidden');
+});
+document.getElementById('btnChatSettingsBack')?.addEventListener('click', () => {
+  document.getElementById('mpChatSettings')?.classList.add('hidden');
+  document.getElementById('mpPauseMenu')?.classList.remove('hidden');
+});
+document.getElementById('btnChatSettingsSave')?.addEventListener('click', () => {
+  chatSettings = {
+    pos: document.getElementById('chatPos')?.value||'bl',
+    w: parseInt(document.getElementById('chatW')?.value)||280,
+    h: parseInt(document.getElementById('chatH')?.value)||140,
+    font: parseInt(document.getElementById('chatFont')?.value)||13,
+    show: !!document.getElementById('chatShow')?.checked
+  };
+  try { localStorage.setItem('tk_chat', JSON.stringify(chatSettings)); } catch(e){}
+  applyChatLayout();
+  document.getElementById('mpChatSettings')?.classList.add('hidden');
+});
+['chatW','chatH','chatFont'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', e => {
+    const map={chatW:'chatWVal',chatH:'chatHVal',chatFont:'chatFontVal'};
+    const el=document.getElementById(map[id]); if(el) el.textContent=e.target.value;
+  });
+});
+document.getElementById('btnMpToSettings')?.addEventListener('click', () => {
+  document.getElementById('mpPauseMenu')?.classList.add('hidden');
+  showScreen('settingsScreen');
+});
+document.getElementById('btnMpExit')?.addEventListener('click', () => {
+  document.getElementById('mpPauseMenu')?.classList.add('hidden');
+  hideMpExtras(); leaveMultiplayer(); running=false; showScreen('mainMenu');
+});
+document.getElementById('mpChatSend')?.addEventListener('click', sendChat);
+document.getElementById('mpChatInput')?.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); sendChat(); } });
+document.getElementById('btnUbConfirm')?.addEventListener('click', confirmUserBossPick);
+
+
 document.getElementById('btnCreateRoom').onclick = () => connectRoom(Math.random().toString(36).slice(2,6).toUpperCase(), true);
 document.getElementById('btnJoinRoom').onclick = () => connectRoom(document.getElementById('roomCodeInput').value, false);
 document.getElementById('btnRefreshRooms').onclick = () => fetchOpenRooms(true);
@@ -1147,7 +1191,9 @@ function renderOpenRooms(rooms){
     const code = String(r.code || r.room || '').toUpperCase();
     const count = r.count != null ? r.count : (r.players != null ? r.players : '?');
     const host = r.hostName || r.host || r.name || '';
-    const meta = host ? (count + ' игр. · ' + host) : (count + ' игр.');
+    const mode = r.mode || (r.config && r.config.mode) || '';
+    const modeTag = mode==='empty'?'🏠':(mode==='userboss'?'👑':'⚔');
+    const meta = modeTag+' '+(host ? (count + ' игр. · ' + host) : (count + ' игр.'));
     return '<div class="room-list-item" data-code="'+code+'"><span class="rc">'+code+'</span><span class="rmeta">'+meta+'</span></div>';
   }).join('');
   box.querySelectorAll('.room-list-item').forEach(el => {
@@ -1211,11 +1257,15 @@ function leaveMultiplayer(){
   net.socket = null; net.active = false; net.room = ''; net.id = ''; net.host = false; net.players.clear();
   net.config = null; net.savedMods = null; net.savedBossMods = null;
   roomHudEl.textContent = '';
+  try { hideMpExtras(); mpMode='boss'; userBoss={active:false,bossId:null,isMe:false,abilities:[],cd:{},pickDone:false,name:''}; } catch(e){}
 }
 
 function roomConfig(){
   const syncCode = !document.getElementById('roomSyncCode') || document.getElementById('roomSyncCode').checked;
+  const modeEl = document.querySelector('input[name="roomMode"]:checked');
+  const mode = (modeEl && modeEl.value) || 'boss';
   return {
+    mode: mode,
     open: !!(document.getElementById('roomOpen') && document.getElementById('roomOpen').checked),
     v1: document.getElementById('roomMods1').checked ? {
       playerSpeed:mods.playerSpeed, playerSize:mods.playerSize, mapSize:mods.mapSize,
@@ -1240,6 +1290,303 @@ function roomConfig(){
     syncCode: syncCode
   };
 }
+
+
+// ===== MULTIPLAYER MODES + BOSS ABILITY SYNC =====
+let mpMode = 'boss';
+let userBoss = {
+  active: false,
+  bossId: null,
+  isMe: false,
+  abilities: [],
+  cd: {},
+  pickDone: false,
+  name: ''
+};
+let chatSettings = (function(){ try { return JSON.parse(localStorage.getItem('tk_chat')||'null'); } catch(e){ return null; } })() || { pos:'bl', w:280, h:140, font:13, show:true };
+
+const UB_ABILITIES = [
+  { id:'fan', name:'Веер', desc:'Снаряды веером', cd:1200 },
+  { id:'ring', name:'Кольцо', desc:'Круг снарядов', cd:1800 },
+  { id:'laser', name:'Лазер', desc:'Луч вперёд', cd:2000 },
+  { id:'charge', name:'Рывок', desc:'Таран', cd:2500 },
+  { id:'summon', name:'NPC', desc:'Призыв', cd:4000 },
+  { id:'phantom', name:'Фантом', desc:'Фантом-лазеры', cd:5000 },
+  { id:'spiral', name:'Спираль', desc:'Спираль снарядов', cd:2200 },
+  { id:'tarantula', name:'Тарантул', desc:'Быстрый моб', cd:3500 }
+];
+
+function beginMultiplayerMode(mode){
+  mpMode = mode || 'boss';
+  userBoss = { active:false, bossId:null, isMe:false, abilities:[], cd:{}, pickDone:false, name:'' };
+  hideMpExtras();
+  if(mpMode === 'empty') startEmptyRoom();
+  else if(mpMode === 'userboss') startUserBossFlow();
+  else if(running && !bossMode) startBoss();
+}
+
+function hideMpExtras(){
+  const ids = ['mpMenuBtn','mpChat','userBossBar'];
+  ids.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+  document.getElementById('mpPauseMenu')?.classList.add('hidden');
+  document.getElementById('mpChatSettings')?.classList.add('hidden');
+  document.getElementById('userBossPick')?.classList.add('hidden');
+}
+
+function startEmptyRoom(){
+  bossMode = false; boss = null; enemies = [];
+  if(statusEl){ statusEl.textContent = '🏠 Пустая комната'; statusEl.style.color = '#8cf'; }
+  if(bossHpEl) bossHpEl.style.display = 'none';
+  const btn = document.getElementById('mpMenuBtn');
+  if(btn) btn.style.display = 'flex';
+  applyChatLayout();
+  showChat(true);
+}
+
+function applyChatLayout(){
+  const box = document.getElementById('mpChat');
+  const log = document.getElementById('mpChatLog');
+  if(!box || !log) return;
+  const s = chatSettings;
+  box.style.width = (s.w||280)+'px';
+  log.style.height = (s.h||140)+'px';
+  log.style.fontSize = (s.font||13)+'px';
+  box.style.left = box.style.right = box.style.top = box.style.bottom = 'auto';
+  const m='calc(12px + env(safe-area-inset-bottom))', m2='calc(12px + env(safe-area-inset-top))';
+  const ml='calc(12px + env(safe-area-inset-left))', mr='calc(12px + env(safe-area-inset-right))';
+  if(s.pos==='br'){ box.style.right=mr; box.style.bottom=m; }
+  else if(s.pos==='tl'){ box.style.left=ml; box.style.top=m2; }
+  else if(s.pos==='tr'){ box.style.right=mr; box.style.top=m2; }
+  else { box.style.left=ml; box.style.bottom=m; }
+  box.style.display = (s.show===false) ? 'none' : 'flex';
+}
+function showChat(on){
+  const box = document.getElementById('mpChat');
+  if(!box) return;
+  if(on && chatSettings.show!==false) box.style.display='flex';
+  else if(!on) box.style.display='none';
+  applyChatLayout();
+}
+function appendChat(name, text, self){
+  const log = document.getElementById('mpChatLog');
+  if(!log) return;
+  const row = document.createElement('div');
+  row.style.marginBottom='4px'; row.style.wordBreak='break-word';
+  row.innerHTML = '<b style="color:'+(self?'#8f8':'#f8a')+'">'+(name||'?').replace(/[<>&]/g,'')+':</b> '+String(text||'').replace(/[<>&]/g,'');
+  log.appendChild(row); log.scrollTop = log.scrollHeight;
+}
+function sendChat(){
+  const inp = document.getElementById('mpChatInput');
+  if(!inp) return;
+  const text = inp.value.trim(); if(!text) return;
+  inp.value='';
+  const name = (document.getElementById('playerNameInput')?.value||'Игрок').slice(0,16);
+  appendChat(name, text, true);
+  sendNet({ type:'chat', name, text, from: net.id });
+}
+
+function startUserBossFlow(){
+  if(statusEl){ statusEl.textContent='👑 Выбор юзер-босса…'; statusEl.style.color='#f6f'; }
+  if(net.host){
+    setTimeout(function(){
+      if(!running || mpMode!=='userboss') return;
+      const ids = [net.id];
+      net.players.forEach(function(_,id){ ids.push(id); });
+      const pick = ids[Math.floor(Math.random()*ids.length)];
+      const name = pick===net.id
+        ? (document.getElementById('playerNameInput')?.value||'Хост')
+        : ((net.players.get(pick)||{}).name || 'Игрок');
+      // full sync package
+      sendNet({ type:'userboss', bossId: pick, name: name });
+      applyUserBossRole(pick, name);
+    }, 900);
+  }
+}
+
+function applyUserBossRole(bossId, name){
+  userBoss.active = true;
+  userBoss.bossId = bossId;
+  userBoss.isMe = (bossId === net.id);
+  userBoss.name = name || 'Босс';
+  userBoss.abilities = [];
+  userBoss.cd = {};
+  userBoss.pickDone = false;
+  if(userBoss.isMe) openUserBossPick();
+  else if(statusEl){
+    statusEl.textContent = '👑 Босс: ' + userBoss.name + ' (выбор способностей…)';
+    statusEl.style.color = '#f6f';
+  }
+}
+
+function openUserBossPick(){
+  const scr = document.getElementById('userBossPick');
+  const list = document.getElementById('ubPickList');
+  if(!scr||!list) return;
+  list.innerHTML = UB_ABILITIES.map(function(a){
+    return '<label style="display:flex;gap:10px;align-items:flex-start;background:#1a1a1a;border:1px solid #444;border-radius:12px;padding:10px;cursor:pointer">'
+      +'<input type="checkbox" data-ub="'+a.id+'" style="width:18px;height:18px;margin-top:2px;accent-color:#f44">'
+      +'<span><b style="color:#fff">'+a.name+'</b><br><span style="color:#888;font-size:12px">'+a.desc+'</span></span></label>';
+  }).join('');
+  scr.classList.remove('hidden');
+}
+
+function confirmUserBossPick(){
+  const chosen = [];
+  document.querySelectorAll('#ubPickList input[data-ub]').forEach(function(b){
+    if(b.checked) chosen.push(b.getAttribute('data-ub'));
+  });
+  if(!chosen.length){ alert('Выбери хотя бы 1 способность'); return; }
+  if(chosen.length > 4){ alert('Максимум 4'); return; }
+  userBoss.abilities = chosen.slice();
+  userBoss.pickDone = true;
+  document.getElementById('userBossPick')?.classList.add('hidden');
+
+  // SYNC abilities to entire room BEFORE fight starts
+  sendNet({
+    type: 'ub_abilities',
+    bossId: net.id,
+    name: (document.getElementById('playerNameInput')?.value||'Босс').slice(0,16),
+    abilities: chosen
+  });
+  onUserBossAbilitiesReady(net.id, chosen, userBoss.name);
+}
+
+function onUserBossAbilitiesReady(bossId, abilities, name){
+  userBoss.active = true;
+  userBoss.bossId = bossId;
+  userBoss.isMe = (bossId === net.id);
+  userBoss.abilities = (abilities||[]).slice();
+  userBoss.pickDone = true;
+  userBoss.name = name || userBoss.name || 'Босс';
+
+  if(!bossMode) startBoss();
+  if(boss){
+    boss.userControlled = true;
+    boss.r = 55;
+    boss.hp = boss.maxHp = Math.max(boss.maxHp||630, 800);
+  }
+  // stop pure AI spam for user boss: mark phase
+  if(userBoss.isMe){
+    showUserBossBar();
+    if(statusEl){ statusEl.textContent='👑 Ты босс! Способности синхронизированы'; statusEl.style.color='#f6f'; }
+  } else {
+    if(statusEl){
+      statusEl.textContent='⚔ Босс '+userBoss.name+' · '+userBoss.abilities.join(', ');
+      statusEl.style.color='#f6f';
+    }
+  }
+  if(bossHpEl) bossHpEl.style.display='block';
+}
+
+function showUserBossBar(){
+  const bar = document.getElementById('userBossBar');
+  if(!bar) return;
+  bar.innerHTML = '';
+  bar.style.display = 'flex';
+  userBoss.abilities.forEach(function(id){
+    const def = UB_ABILITIES.find(function(a){ return a.id===id; });
+    const btn = document.createElement('button');
+    btn.className = 'ub-atk';
+    btn.setAttribute('data-atk', id);
+    btn.textContent = def ? def.name : id;
+    btn.style.cssText = 'padding:10px 12px;border-radius:12px;border:1px solid #f6a;background:rgba(80,20,60,.85);color:#fff;font-size:12px;font-weight:700;cursor:pointer';
+    btn.onclick = function(){ fireUserBossAtk(id); };
+    bar.appendChild(btn);
+  });
+}
+
+function aimAngleFromBoss(){
+  if(!boss) return 0;
+  let ang = Math.atan2(mouse.y - boss.y, mouse.x - boss.x);
+  try {
+    if(typeof joyVec!=='undefined' && joyVec && (Math.abs(joyVec.x)>0.2||Math.abs(joyVec.y)>0.2))
+      ang = Math.atan2(joyVec.y, joyVec.x);
+  } catch(e){}
+  return ang;
+}
+
+function fireUserBossAtk(id){
+  if(!userBoss.isMe || !boss || !bossMode) return;
+  const def = UB_ABILITIES.find(function(a){ return a.id===id; });
+  const now = performance.now();
+  if((userBoss.cd[id]||0) > now) return;
+  userBoss.cd[id] = now + ((def && def.cd) || 1500);
+  const ang = aimAngleFromBoss();
+  const payload = {
+    type: 'ub_atk',
+    from: net.id,
+    atk: id,
+    ang: ang,
+    x: boss.x,
+    y: boss.y,
+    t: now
+  };
+  // local predict
+  doUserBossAtk(payload);
+  // sync to others
+  sendNet(payload);
+  // update bar cooldown visual
+  const btn = document.querySelector('#userBossBar [data-atk="'+id+'"]');
+  if(btn){
+    btn.style.opacity = '0.45';
+    setTimeout(function(){ btn.style.opacity='1'; }, (def&&def.cd)||1500);
+  }
+}
+
+function doUserBossAtk(p){
+  if(!p || !boss) return;
+  // ignore duplicate from self if already predicted — still ok to run once from network for others
+  const id = p.atk, ang = p.ang, x = p.x, y = p.y;
+  // snap boss pos from authority if remote
+  if(!userBoss.isMe && typeof x==='number'){ boss.x = x; boss.y = y; }
+  if(id==='fan'){
+    for(let i=-2;i<=2;i++){
+      const a = ang + i*0.18;
+      shitBalls.push({x:x,y:y,vx:Math.cos(a)*7,vy:Math.sin(a)*7,r:10,life:120});
+    }
+  } else if(id==='ring'){
+    for(let i=0;i<12;i++){
+      const a=(i/12)*Math.PI*2;
+      shitBalls.push({x:x,y:y,vx:Math.cos(a)*5.5,vy:Math.sin(a)*5.5,r:9,life:100});
+    }
+  } else if(id==='spiral'){
+    for(let i=0;i<10;i++){
+      const a = ang + i*0.45;
+      shitBalls.push({x:x,y:y,vx:Math.cos(a)*(4+i*0.25),vy:Math.sin(a)*(4+i*0.25),r:8,life:110});
+    }
+  } else if(id==='laser'){
+    lasers.push({x:x,y:y,ang:ang,life:50,warning:false,width:14});
+  } else if(id==='charge'){
+    boss.charging=true; boss.chargeTime=28;
+    boss.chargeVx=Math.cos(ang)*11; boss.chargeVy=Math.sin(ang)*11;
+  } else if(id==='summon'){
+    const ex=x+Math.cos(ang)*90, ey=y+Math.sin(ang)*90;
+    if(typeof makeEnemy==='function'){
+      try { const e=makeEnemy(ex,ey); if(e){ e.hp=Math.min(e.hp||100,80); enemies.push(e);} } catch(err){
+        enemies.push({x:ex,y:ey,r:22,hp:80,maxHp:80,sp:2.5,base:2.2,size:1});
+      }
+    } else enemies.push({x:ex,y:ey,r:22,hp:80,maxHp:80,sp:2.5,base:2.2,size:1});
+  } else if(id==='tarantula'){
+    tarantulas.push({x:x+Math.cos(ang)*40,y:y+Math.sin(ang)*40,r:16,life:400});
+  } else if(id==='phantom'){
+    if(typeof spawnBossPhantom==='function') spawnBossPhantom({forceSpin:true});
+  }
+  shake = Math.max(shake, 8);
+}
+
+// user-boss sends own boss transform so everyone sees movement
+function syncUserBossState(){
+  if(!net.active || !userBoss.isMe || !boss || !bossMode) return;
+  sendNet({
+    type:'ub_state',
+    from: net.id,
+    x: boss.x, y: boss.y, hp: boss.hp, maxHp: boss.maxHp,
+    phase: bossPhase,
+    charging: !!boss.charging,
+    abilities: userBoss.abilities
+  });
+}
+
 
 function connectRoom(rawCode, create){
   const code = String(rawCode || '').trim().toUpperCase();
@@ -1285,9 +1632,9 @@ function connectRoom(rawCode, create){
       if(net.config.giants) mods.playerSize = 30;
       // compile host custom code on EVERY client so banners/content match
       try { compileUserMod(); } catch(e){ console.error('[net] mod compile', e); }
-      status.textContent = `Комната ${data.room}: бой начинается!` + (mods.customCode ? ' · мод-код загружен' : '');
+      status.textContent = `Комната ${data.room}: вход…` + (mods.customCode ? ' · мод-код загружен' : '');
       startGame();
-      setTimeout(() => { if(running && !bossMode) startBoss(); }, 100);
+      setTimeout(() => { if(running) beginMultiplayerMode(net.config && net.config.mode); }, 120);
     } else if(data.type === 'modcode'){
       // live code push — у всех в комнате, даже без файлов
       if(typeof data.code === 'string'){
@@ -1326,7 +1673,27 @@ function connectRoom(rawCode, create){
       else net.players.set(data.id, {...data,tx:data.x,ty:data.y,seen:performance.now()});
     } else if(data.type === 'left') net.players.delete(data.id);
     else if(data.type === 'room') roomHudEl.textContent = `🌐 ${net.room} · игроков: ${data.count}`;
-    else if(data.type === 'damage' && boss?.hp > 0){
+    else if(data.type === 'chat'){
+      if(data.from !== net.id) appendChat(data.name||'?', data.text||'', false);
+    } else if(data.type === 'userboss'){
+      applyUserBossRole(data.bossId, data.name);
+    } else if(data.type === 'ub_abilities'){
+      // authoritative ability list for the room boss
+      onUserBossAbilitiesReady(data.bossId, data.abilities||[], data.name);
+    } else if(data.type === 'ub_atk'){
+      // everyone except local predictor (already ran) executes; if from self skip
+      if(data.from !== net.id) doUserBossAtk(data);
+    } else if(data.type === 'ub_state'){
+      if(data.from !== net.id && boss && userBoss.active){
+        boss.x = data.x; boss.y = data.y;
+        if(typeof data.hp==='number') boss.hp = data.hp;
+        if(typeof data.maxHp==='number') boss.maxHp = data.maxHp;
+        if(data.abilities && data.abilities.length && !userBoss.abilities.length){
+          userBoss.abilities = data.abilities.slice();
+        }
+        if(data.charging){ boss.charging = true; }
+      }
+    } else if(data.type === 'damage' && boss?.hp > 0){
       boss.hp = Math.max(0, boss.hp - Math.max(0, Math.min(50, Number(data.amount) || 0)));
       if(boss.hp <= 0) winBoss();
     } else if(data.type === 'boss' && !net.host && boss){
@@ -1867,171 +2234,7 @@ document.getElementById('btnClearCustomCode').onclick = () => {
   };
 };
 
-
-// ===== ONLINE MOD LIBRARY =====
-const MOD_LIB = {
-  repo: 'leyroma9-art/Guysx-technoknight-game',
-  branch: 'main',
-  site: 'https://guysx-technoknight-game.onrender.com',
-  catalogUrls: [
-    'https://guysx-technoknight-game.onrender.com/Mods/catalog.json',
-    'https://guysx-technoknight-game.onrender.com/catalog.json',
-    'https://cdn.jsdelivr.net/gh/leyroma9-art/Guysx-technoknight-game@main/Mods/catalog.json',
-    'https://cdn.jsdelivr.net/gh/leyroma9-art/Guysx-technoknight-game@main/catalog.json',
-    'https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/Mods/catalog.json',
-    'https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/catalog.json'
-  ],
-  cache: null
-};
-
-function modLibFileUrls(filePath){
-  const f = String(filePath || '').replace(/^\/+/, '');
-  const site = MOD_LIB.site;
-  const repo = MOD_LIB.repo;
-  const br = MOD_LIB.branch;
-  return [
-    site + '/' + f,
-    site + '/Mods/' + f,
-    'https://cdn.jsdelivr.net/gh/' + repo + '@' + br + '/' + f,
-    'https://cdn.jsdelivr.net/gh/' + repo + '@' + br + '/Mods/' + f,
-    'https://raw.githubusercontent.com/' + repo + '/' + br + '/' + f,
-    'https://raw.githubusercontent.com/' + repo + '/' + br + '/Mods/' + f
-  ];
-}
-
-async function fetchModCatalog(){
-  const status = document.getElementById('modLibStatus');
-  const list = document.getElementById('modLibList');
-  if(status){ status.style.color = '#888'; status.textContent = 'Загрузка каталога...'; }
-  if(list) list.innerHTML = '';
-  let lastErr = null;
-  for(const url of MOD_LIB.catalogUrls){
-    try {
-      const res = await fetch(url + (url.indexOf('?')>=0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if(!data || !Array.isArray(data.mods)) throw new Error('Неверный catalog.json');
-      MOD_LIB.cache = data;
-      if(status){
-        status.style.color = '#8f8';
-        status.textContent = 'Каталог v' + (data.version||'?') + ' · модов: ' + data.mods.length + (data.updated ? ' · ' + data.updated : '');
-      }
-      renderModLibrary(data);
-      return data;
-    } catch(e){
-      lastErr = e;
-      console.warn('[modlib]', url, e);
-    }
-  }
-  if(status){
-    status.style.color = '#f88';
-    status.textContent = 'Не удалось загрузить каталог. ' + (lastErr && lastErr.message ? lastErr.message : '');
-  }
-  return null;
-}
-
-function isModInstalled(idOrName){
-  if(typeof ensureCustomMods === 'function') ensureCustomMods();
-  if(!Array.isArray(mods.customMods)) return false;
-  const key = String(idOrName || '').toLowerCase();
-  return mods.customMods.some(function(m){
-    const n = String(m.name || '').toLowerCase();
-    return n === key || n === key + '.js' || n.indexOf(key) >= 0;
-  });
-}
-
-function renderModLibrary(data){
-  const list = document.getElementById('modLibList');
-  if(!list) return;
-  if(!data || !data.mods || !data.mods.length){
-    list.innerHTML = '<div style="color:#666;font-size:12px;padding:10px">Пусто</div>';
-    return;
-  }
-  list.innerHTML = data.mods.map(function(m){
-    const id = String(m.id || m.name || 'mod').replace(/[<>&"']/g,'');
-    const name = String(m.name || id).replace(/[<>&]/g,'');
-    const desc = String(m.desc || '').replace(/[<>&]/g,'');
-    const author = String(m.author || '').replace(/[<>&]/g,'');
-    const ver = String(m.version || '').replace(/[<>&]/g,'');
-    const tags = Array.isArray(m.tags) ? m.tags.map(function(x){return String(x).replace(/[<>&]/g,'');}).join(', ') : '';
-    const installed = isModInstalled(m.id) || isModInstalled(m.file);
-    const btnLabel = installed ? '✓ Установлен' : '⬇ Скачать';
-    const btnStyle = installed
-      ? 'background:#1a2a1a;border:1px solid #3a5;color:#8f8'
-      : 'background:#2a1515;border:1px solid #f44;color:#fff';
-    return '<div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:12px;text-align:left">'
-      + '<div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:4px">' + name
-      + (ver ? ' <span style="color:#666;font-weight:500;font-size:11px">v' + ver + '</span>' : '')
-      + '</div>'
-      + (author ? '<div style="font-size:11px;color:#888;margin-bottom:4px">👤 ' + author + '</div>' : '')
-      + (desc ? '<div style="font-size:12px;color:#aaa;line-height:1.35;margin-bottom:8px">' + desc + '</div>' : '')
-      + (tags ? '<div style="font-size:11px;color:#666;margin-bottom:8px">' + tags + '</div>' : '')
-      + '<button type="button" data-mod-dl="' + id + '" style="font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;' + btnStyle + '">' + btnLabel + '</button>'
-      + '</div>';
-  }).join('');
-
-  list.querySelectorAll('[data-mod-dl]').forEach(function(btn){
-    btn.onclick = async function(){
-      const mid = btn.getAttribute('data-mod-dl');
-      const entry = ((MOD_LIB.cache && MOD_LIB.cache.mods) || []).find(function(x){ return x.id === mid || x.name === mid; });
-      if(!entry) return;
-      btn.disabled = true;
-      btn.textContent = '…';
-      try {
-        await installModFromLibrary(entry);
-        btn.textContent = '✓ Установлен';
-        btn.style.background = '#1a2a1a';
-        btn.style.borderColor = '#3a5';
-        btn.style.color = '#8f8';
-      } catch(e){
-        console.error(e);
-        btn.textContent = 'Ошибка';
-        btn.style.borderColor = '#f44';
-        btn.style.color = '#f88';
-        const st = document.getElementById('modLibStatus');
-        if(st){ st.style.color = '#f88'; st.textContent = 'Ошибка: ' + (e.message || e); }
-      }
-      btn.disabled = false;
-    };
-  });
-}
-
-async function installModFromLibrary(entry){
-  const file = entry.file || entry.path;
-  if(!file) throw new Error('В каталоге нет поля file');
-  const urls = modLibFileUrls(file);
-  let code = null, lastErr = null;
-  for(let i=0;i<urls.length;i++){
-    const url = urls[i];
-    try {
-      const res = await fetch(url + (url.indexOf('?')>=0?'&':'?') + 't=' + Date.now(), { cache: 'no-store' });
-      if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
-      code = await res.text();
-      if(!code || code.length < 5) throw new Error('Пустой файл');
-      const trim = code.trim();
-      if(trim.indexOf('<!DOCTYPE')===0 || trim.indexOf('<html')===0 || trim.indexOf('Cannot GET')>=0)
-        throw new Error('HTML вместо JS: ' + url);
-      break;
-    } catch(e){ lastErr = e; code = null; }
-  }
-  if(code == null) throw lastErr || new Error('Не скачалось');
-  if(typeof ensureCustomMods === 'function') ensureCustomMods();
-  if(!Array.isArray(mods.customMods)) mods.customMods = [];
-  const name = (entry.id || 'mod') + '.js';
-  const existing = mods.customMods.findIndex(function(m){ return m.name === name || m.name === file; });
-  const item = { name: name, code: code, libId: entry.id || null };
-  if(existing >= 0) mods.customMods[existing] = item;
-  else mods.customMods.push(item);
-  if(typeof rebuildCustomCodeFromMods === 'function') rebuildCustomCodeFromMods();
-  if(typeof updateModCodeFileInfo === 'function') updateModCodeFileInfo();
-  if(typeof compileUserMod === 'function') compileUserMod();
-  try { localStorage.setItem('tk_mods', JSON.stringify(mods)); } catch(e){}
-}
-
-document.getElementById('btnLibRefresh') && document.getElementById('btnLibRefresh').addEventListener('click', function(){ fetchModCatalog(); });
-
-
-document.getElementById('btnMods').onclick = () => { loadModsToUI(); showScreen('modsScreen'); setTimeout(applyPlatformMode, 30); setTimeout(function(){ if(!MOD_LIB.cache) fetchModCatalog(); }, 80); };
+document.getElementById('btnMods').onclick = () => { loadModsToUI(); showScreen('modsScreen'); setTimeout(applyPlatformMode, 30); };
 document.getElementById('btnModsBack').onclick = () => showScreen('mainMenu');
 
 document.getElementById('btnSaveMods').onclick = () => {
@@ -4377,7 +4580,11 @@ function update(){
   if(net.active && now-net.lastSend>33){
     net.lastSend=now;
     sendNet({type:'state',x:player.x,y:player.y,hp:player.hp,alive:true});
-    if(net.host && boss) sendNet({type:'boss',x:boss.x,y:boss.y,hp:boss.hp,maxHp:boss.maxHp,phase:bossPhase});
+    if(net.host && boss && !(userBoss && userBoss.active && userBoss.isMe)) sendNet({type:'boss',x:boss.x,y:boss.y,hp:boss.hp,maxHp:boss.maxHp,phase:bossPhase});
+    if(userBoss && userBoss.isMe && boss) {
+      if(!window._lastUbSync) window._lastUbSync = 0;
+      if(performance.now() - window._lastUbSync > 50){ window._lastUbSync = performance.now(); syncUserBossState(); }
+    }
     // host periodically syncs mod solids + shared bag so custom content is visible to all
     if(net.host){
       if(!net._lastModSync) net._lastModSync = 0;
@@ -7341,5 +7548,46 @@ requestAnimationFrame(loop);
 document.addEventListener('gesturestart',e=>e.preventDefault());
 c.addEventListener('contextmenu',e=>e.preventDefault());
 </script>
+
+<div id="mpMenuBtn" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));z-index:40;width:44px;height:44px;border-radius:12px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:20px;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto">☰</div>
+<div id="mpPauseMenu" class="screen hidden" style="z-index:70;background:rgba(0,0,0,.88)">
+  <h1 class="logo" style="font-size:22px;margin-bottom:12px">ПАУЗА</h1>
+  <button class="menu-btn green" id="btnMpContinue" style="min-width:220px">Продолжить</button>
+  <button class="menu-btn secondary" id="btnMpChatSettings" style="min-width:220px">Настройки чата</button>
+  <button class="menu-btn secondary" id="btnMpToSettings" style="min-width:220px">Настройки игры</button>
+  <button class="menu-btn" id="btnMpExit" style="min-width:220px;background:linear-gradient(135deg,#833,#511)">Выйти в меню</button>
+</div>
+<div id="mpChatSettings" class="screen hidden" style="z-index:71;background:rgba(0,0,0,.92)">
+  <h1 class="logo" style="font-size:20px;margin-bottom:10px">ЧАТ</h1>
+  <div class="settings-row" style="max-width:340px"><label>Позиция</label>
+    <select id="chatPos" style="width:100%;padding:10px;border-radius:10px;background:#1a1a1a;color:#fff;border:1px solid #444">
+      <option value="bl">Слева снизу</option><option value="br">Справа снизу</option>
+      <option value="tl">Слева сверху</option><option value="tr">Справа сверху</option>
+    </select></div>
+  <div class="settings-row" style="max-width:340px"><label>Ширина: <span id="chatWVal">280</span>px</label>
+    <input type="range" id="chatW" min="200" max="420" step="10" value="280" style="width:100%;accent-color:#f44"></div>
+  <div class="settings-row" style="max-width:340px"><label>Высота логов: <span id="chatHVal">140</span>px</label>
+    <input type="range" id="chatH" min="80" max="280" step="10" value="140" style="width:100%;accent-color:#f44"></div>
+  <div class="settings-row" style="max-width:340px"><label>Шрифт: <span id="chatFontVal">13</span>px</label>
+    <input type="range" id="chatFont" min="11" max="18" step="1" value="13" style="width:100%;accent-color:#f44"></div>
+  <div class="settings-row" style="max-width:340px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="chatShow" checked style="width:18px;height:18px;accent-color:#f44"> Показывать чат</label></div>
+  <button class="menu-btn green" id="btnChatSettingsSave" style="min-width:200px">Сохранить</button>
+  <button class="back-btn" id="btnChatSettingsBack">← Назад</button>
+</div>
+<div id="mpChat" style="display:none;position:absolute;z-index:35;pointer-events:auto;flex-direction:column;gap:6px;max-width:90vw">
+  <div id="mpChatLog" style="background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px;overflow-y:auto;text-align:left;color:#ddd"></div>
+  <div style="display:flex;gap:6px">
+    <input id="mpChatInput" type="text" maxlength="120" placeholder="Сообщение…" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid #444;background:#1a1a1a;color:#fff;font-size:14px">
+    <button id="mpChatSend" style="padding:10px 14px;border-radius:12px;border:1px solid #555;background:#2a2a2a;color:#fff;font-weight:700;cursor:pointer">➤</button>
+  </div>
+</div>
+<div id="userBossBar" style="display:none;position:absolute;bottom:calc(90px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:36;gap:8px;flex-wrap:wrap;justify-content:center;max-width:96vw;pointer-events:auto"></div>
+<div id="userBossPick" class="screen hidden" style="z-index:65;background:rgba(0,0,0,.92)">
+  <h1 class="logo" style="font-size:22px;margin-bottom:8px">ТЫ БОСС</h1>
+  <p class="subtitle" style="margin-bottom:12px">Выбери до 4 способностей — они синхронизируются со всеми</p>
+  <div id="ubPickList" style="display:flex;flex-direction:column;gap:8px;max-width:340px;width:100%;text-align:left"></div>
+  <button class="menu-btn green" id="btnUbConfirm" style="margin-top:14px;min-width:220px">ГОТОВ</button>
+</div>
+
 </body>
 </html>
