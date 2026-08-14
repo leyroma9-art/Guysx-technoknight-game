@@ -136,13 +136,17 @@ wss.on('connection', (ws) => {
     if (!room || !room.clients.has(playerId)) return;
 
     // ----- исходящие от клиента — ретрансляция -----
+    // Всё, что клиенты шлют друг другу (чат, юзер-босс, стейт…)
     const relayTypes = new Set([
       'state', 'damage', 'boss', 'victory',
-      'modcode', 'modmsg', 'modshared', 'modsolids'
+      'modcode', 'modmsg', 'modshared', 'modsolids',
+      'chat', 'userboss', 'ub_abilities', 'ub_atk', 'ub_state'
     ]);
 
     if (relayTypes.has(msg.type)) {
       const out = { ...msg, id: playerId };
+      // from всегда = кто реально отправил (для chat/ub_*)
+      if (!out.from) out.from = playerId;
       // host может пушить мод-код всем
       if (msg.type === 'modcode' && room.hostId !== playerId) return;
       broadcast(room, out, playerId);

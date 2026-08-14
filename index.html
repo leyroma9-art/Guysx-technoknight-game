@@ -1676,14 +1676,17 @@ function doUserBossAtk(p){
 // user-boss sends own boss transform so everyone sees movement
 function syncUserBossState(){
   if(!net.active || !userBoss.isMe || !boss || !bossMode) return;
-  sendNet({
+  const payload = {
     type:'ub_state',
     from: net.id,
     x: boss.x, y: boss.y, hp: boss.hp, maxHp: boss.maxHp,
     phase: bossPhase,
     charging: !!boss.charging,
     abilities: userBoss.abilities
-  });
+  };
+  sendNet(payload);
+  // дубль через старый канал boss — другие клиенты точно увидят позицию
+  sendNet({ type:'boss', x:boss.x, y:boss.y, hp:boss.hp, maxHp:boss.maxHp, phase:bossPhase, from:net.id });
 }
 
 
@@ -1773,7 +1776,8 @@ function connectRoom(rawCode, create){
     } else if(data.type === 'left') net.players.delete(data.id);
     else if(data.type === 'room') roomHudEl.textContent = `🌐 ${net.room} · игроков: ${data.count}`;
     else if(data.type === 'chat'){
-      if(data.from !== net.id) appendChat(data.name||'?', data.text||'', false);
+      const who = data.from || data.id;
+      if(who !== net.id) appendChat(data.name||'?', data.text||'', false);
     } else if(data.type === 'userboss'){
       applyUserBossRole(data.bossId, data.name);
     } else if(data.type === 'ub_abilities'){
@@ -1783,21 +1787,33 @@ function connectRoom(rawCode, create){
       // everyone except local predictor (already ran) executes; if from self skip
       if(data.from !== net.id) doUserBossAtk(data);
     } else if(data.type === 'ub_state'){
-      if(data.from !== net.id && boss && userBoss.active){
-        boss.x = data.x; boss.y = data.y;
-        if(typeof data.hp==='number') boss.hp = data.hp;
-        if(typeof data.maxHp==='number') boss.maxHp = data.maxHp;
-        if(data.abilities && data.abilities.length && !userBoss.abilities.length){
-          userBoss.abilities = data.abilities.slice();
+      if(data.from !== net.id && userBoss && userBoss.active){
+        if(!bossMode){ try{ startBoss(); }catch(e){} }
+        if(boss){
+          boss.x = data.x; boss.y = data.y;
+          boss.userControlled = true;
+          if(typeof data.hp==='number') boss.hp = data.hp;
+          if(typeof data.maxHp==='number') boss.maxHp = data.maxHp;
+          if(typeof data.phase==='number') bossPhase = data.phase;
+          if(data.abilities && data.abilities.length){
+            userBoss.abilities = data.abilities.slice();
+            userBoss.pickDone = true;
+          }
+          if(data.charging){ boss.charging = true; }
+          if(bossHpEl) bossHpEl.style.display='block';
         }
-        if(data.charging){ boss.charging = true; }
       }
     } else if(data.type === 'damage' && boss?.hp > 0){
       boss.hp = Math.max(0, boss.hp - Math.max(0, Math.min(50, Number(data.amount) || 0)));
       if(boss.hp <= 0) winBoss();
-    } else if(data.type === 'boss' && !net.host && boss){
-      for(const key of ['x','y','hp','maxHp']) if(Number.isFinite(data[key])) boss[key] = data[key];
-      if([1,2,3,4].includes(data.phase)) bossPhase = data.phase;
+    } else if(data.type === 'boss' && boss){
+      // принимаем позицию босса от юзер-босса (даже если мы host)
+      const fromOther = data.from && data.from !== net.id;
+      const classicGuest = !net.host && !fromOther;
+      if(fromOther || classicGuest || (userBoss && userBoss.active && !userBoss.isMe)){
+        for(const key of ['x','y','hp','maxHp']) if(Number.isFinite(data[key])) boss[key] = data[key];
+        if([1,2,3,4].includes(data.phase)) bossPhase = data.phase;
+      }
     } else if(data.type === 'host') net.host = true;
     else if(data.type === 'victory' && running) winBoss();
   };
