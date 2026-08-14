@@ -1509,6 +1509,18 @@ function applyUserBossRole(bossId, name){
   userBoss.abilities = [];
   userBoss.cd = {};
   userBoss.pickDone = false;
+  // Сразу создаём босса у ВСЕХ — чтобы моделька была видна
+  try {
+    if(!bossMode) startBoss();
+    if(boss){
+      boss.userControlled = true;
+      boss.lastTeleport = performance.now() + 9e9;
+      boss.lastPhantom = performance.now() + 9e9;
+      boss.lastNpcSpawn = performance.now() + 9e9;
+      boss.hp = boss.maxHp = Math.max(boss.maxHp||630, 800);
+    }
+    if(bossHpEl) bossHpEl.style.display = 'block';
+  } catch(e){}
   if(userBoss.isMe) openUserBossPick();
   else if(statusEl){
     statusEl.textContent = '👑 Босс: ' + userBoss.name + ' (выбор способностей…)';
@@ -1692,19 +1704,65 @@ function doUserBossAtk(p){
 }
 
 // user-boss sends own boss transform so everyone sees movement
+
+/** Все клиенты: применить пакет босса (позиция + модель + роль) */
+function applyRemoteUserBossState(data){
+  if(!data || data.id === net.id) return;
+  const bossId = data.bossId || data.id;
+  userBoss.active = true;
+  userBoss.bossId = bossId;
+  userBoss.isMe = false;
+  userBoss.pickDone = true;
+  if(data.name) userBoss.name = data.name;
+  if(Array.isArray(data.abilities) && data.abilities.length) userBoss.abilities = data.abilities.slice();
+  if(!bossMode || !boss){
+    try { startBoss(); } catch(e){}
+  }
+  if(!boss) return;
+  boss.userControlled = true;
+  // AI off
+  boss.lastTeleport = performance.now() + 9e9;
+  boss.lastPhantom = performance.now() + 9e9;
+  boss.lastNpcSpawn = performance.now() + 9e9;
+  if(Number.isFinite(data.x)) { boss.x = data.x; boss._tx = data.x; }
+  if(Number.isFinite(data.y)) { boss.y = data.y; boss._ty = data.y; }
+  if(Number.isFinite(data.bossHp)) boss.hp = data.bossHp;
+  else if(Number.isFinite(data.hp) && data.hp > 100) boss.hp = data.hp;
+  if(Number.isFinite(data.bossMaxHp)) boss.maxHp = data.bossMaxHp;
+  else if(Number.isFinite(data.maxHp)) boss.maxHp = data.maxHp;
+  if(Number.isFinite(data.phase)) bossPhase = data.phase;
+  boss.charging = !!data.charging;
+  if(bossHpEl) bossHpEl.style.display = 'block';
+  enemies = []; // no classic NPC agro on boss map for spectators of user-boss
+}
+
 function syncUserBossState(){
   if(!net.active || !userBoss.isMe || !boss || !bossMode) return;
-  const payload = {
-    type:'ub_state',
-    from: net.id,
-    x: boss.x, y: boss.y, hp: boss.hp, maxHp: boss.maxHp,
+  const name = (document.getElementById('playerNameInput')?.value || userBoss.name || 'Босс').slice(0,16);
+  // Главный канал — state (сервер ВСЕГДА ретранслирует)
+  sendNet({
+    type: 'state',
+    x: boss.x,
+    y: boss.y,
+    hp: 100,
+    bossHp: boss.hp,
+    bossMaxHp: boss.maxHp,
+    maxHp: boss.maxHp,
+    alive: true,
+    isBoss: true,
+    bossId: net.id,
+    name: name,
+    abilities: userBoss.abilities || [],
     phase: bossPhase,
-    charging: !!boss.charging,
-    abilities: userBoss.abilities
-  };
-  sendNet(payload);
-  // дубль через старый канал boss — другие клиенты точно увидят позицию
-  sendNet({ type:'boss', x:boss.x, y:boss.y, hp:boss.hp, maxHp:boss.maxHp, phase:bossPhase, from:net.id });
+    charging: !!boss.charging
+  });
+  // дубли на случай старых клиентов
+  sendNet({
+    type:'ub_state', from: net.id,
+    x: boss.x, y: boss.y, hp: boss.hp, maxHp: boss.maxHp,
+    phase: bossPhase, charging: !!boss.charging, abilities: userBoss.abilities
+  });
+  sendNet({ type:'boss', from:net.id, x:boss.x, y:boss.y, hp:boss.hp, maxHp:boss.maxHp, phase:bossPhase });
 }
 
 
@@ -1791,6 +1849,10 @@ function connectRoom(rawCode, create){
       const teammate = net.players.get(data.id);
       if(teammate) Object.assign(teammate, data, {tx:data.x,ty:data.y,seen:performance.now()});
       else net.players.set(data.id, {...data,tx:data.x,ty:data.y,seen:performance.now()});
+      // ЕДИНЫЙ СИНК ЮЗЕР-БОССА через state (видят все)
+      if(data.isBoss){
+        try { applyRemoteUserBossState(data); } catch(e){ console.warn(e); }
+      }
     } else if(data.type === 'left') net.players.delete(data.id);
     else if(data.type === 'room') roomHudEl.textContent = `🌐 ${net.room} · игроков: ${data.count}`;
     else if(data.type === 'chat'){
@@ -4528,7 +4590,8 @@ function update(){
     }
     const extraHp = (window.extraBosses||[]).reduce((s,eb)=>s+(eb&&eb.hp>0?eb.hp:0),0);
     const shieldMark = (boss.shield>0) ? ' 🛡' : '';
-    bossHpEl.textContent = `${(settings.parentName||'ОТЕЦ').toUpperCase()} ХП: ${Math.max(0,Math.ceil(boss.hp))} / ${boss.maxHp}${extraHp?(' +'+Math.ceil(extraHp)):''}  (фаза ${bossPhase})${shieldMark}`;
+    const _bn = (userBoss && userBoss.active && userBoss.name) ? ('👑 '+userBoss.name) : (settings.parentName||'ОТЕЦ');
+    bossHpEl.textContent = `${String(_bn).toUpperCase()} ХП: ${Math.max(0,Math.ceil(boss.hp))} / ${boss.maxHp}${extraHp?(' +'+Math.ceil(extraHp)):''}  (фаза ${bossPhase})${shieldMark}`;
   }
 
   // ===== PHANTOMS =====
@@ -4892,11 +4955,11 @@ function update(){
   healthEl.textContent=`❤️ ${Math.max(0,Math.ceil(player.hp))}`;
   if(net.active && now-net.lastSend>33){
     net.lastSend=now;
-    sendNet({type:'state',x:player.x,y:player.y,hp:player.hp,alive:true});
-    if(net.host && boss && !(userBoss && userBoss.active && userBoss.isMe)) sendNet({type:'boss',x:boss.x,y:boss.y,hp:boss.hp,maxHp:boss.maxHp,phase:bossPhase});
-    if(userBoss && userBoss.isMe && boss) {
-      if(!window._lastUbSync) window._lastUbSync = 0;
-      if(performance.now() - window._lastUbSync > 50){ window._lastUbSync = performance.now(); syncUserBossState(); }
+    if(userBoss && userBoss.isMe && boss && bossMode){
+      syncUserBossState();
+    } else {
+      sendNet({type:'state',x:player.x,y:player.y,hp:player.hp,alive:true,name:(document.getElementById('playerNameInput')?.value||'Игрок').slice(0,16)});
+      if(net.host && boss && !(userBoss && userBoss.active)) sendNet({type:'boss',x:boss.x,y:boss.y,hp:boss.hp,maxHp:boss.maxHp,phase:bossPhase});
     }
     // host periodically syncs mod solids + shared bag so custom content is visible to all
     if(net.host){
@@ -5344,9 +5407,17 @@ function draw(){
     ctx.restore();
   }
 
-  // teammates
+  // remote user-boss: soft interpolate toward last packet
+  if(boss && userBoss && userBoss.active && !userBoss.isMe && Number.isFinite(boss._tx)){
+    boss.x += (boss._tx - boss.x) * 0.35;
+    boss.y += (boss._ty - boss.y) * 0.35;
+  }
+
+  // teammates (не рисуем зелёный кружок вместо босса)
   for(const teammate of net.players.values()){
     if(teammate.alive === false || !Number.isFinite(teammate.x) || !Number.isFinite(teammate.y)) continue;
+    if(teammate.isBoss) continue;
+    if(userBoss && userBoss.active && teammate.id === userBoss.bossId) continue;
     teammate.x += (teammate.tx-teammate.x)*0.45;
     teammate.y += (teammate.ty-teammate.y)*0.45;
     ctx.fillStyle='#7f7'; ctx.beginPath(); ctx.arc(teammate.x,teammate.y,16,0,Math.PI*2); ctx.fill();
@@ -5357,8 +5428,8 @@ function draw(){
     ctx.fillStyle='#0c8'; ctx.fillRect(teammate.x-20,teammate.y+21,40*Math.max(0,Math.min(1,(teammate.hp||0)/100)),4);
   }
 
-  // player
-  if(player){
+  // player — если ты юзер-босс, моделька охотника не нужна (видна модель босса)
+  if(player && !(userBoss && userBoss.isMe && bossMode)){
     const pg=ctx.createRadialGradient(player.x,player.y,2,player.x,player.y,player.r*2.4);
     pg.addColorStop(0,'rgba(80,220,255,0.5)'); pg.addColorStop(1,'transparent');
     ctx.fillStyle=pg; ctx.beginPath(); ctx.arc(player.x,player.y,player.r*2.4,0,Math.PI*2); ctx.fill();
