@@ -513,6 +513,16 @@ body.ios-mode .btn, body.ios-mode #shootBtn, body.ios-mode #joystickZone{
     </div>
 
 
+
+    <div class="mod-section">Библиотека модов (онлайн)</div>
+    <div class="settings-row">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <button type="button" id="btnLibRefresh" style="font-size:13px;padding:10px 14px;border-radius:12px;border:1px solid #4a6;background:#152a18;color:#cfc;cursor:pointer">🔄 Обновить список</button>
+      </div>
+      <div id="modLibStatus" style="font-size:12px;color:#888;margin-bottom:8px;text-align:left">Нажми «Обновить», чтобы загрузить каталог</div>
+      <div id="modLibList" style="display:flex;flex-direction:column;gap:8px;max-height:min(360px,40vh);overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+    </div>
+
     <div class="mod-section">Пользовательский код (JS-моды)</div>
     <div class="settings-row">
       <label style="color:#aaa;font-size:12px;line-height:1.45;margin-bottom:10px;display:block">
@@ -1857,7 +1867,171 @@ document.getElementById('btnClearCustomCode').onclick = () => {
   };
 };
 
-document.getElementById('btnMods').onclick = () => { loadModsToUI(); showScreen('modsScreen'); setTimeout(applyPlatformMode, 30); };
+
+// ===== ONLINE MOD LIBRARY =====
+const MOD_LIB = {
+  repo: 'leyroma9-art/Guysx-technoknight-game',
+  branch: 'main',
+  site: 'https://guysx-technoknight-game.onrender.com',
+  catalogUrls: [
+    'https://guysx-technoknight-game.onrender.com/Mods/catalog.json',
+    'https://guysx-technoknight-game.onrender.com/catalog.json',
+    'https://cdn.jsdelivr.net/gh/leyroma9-art/Guysx-technoknight-game@main/Mods/catalog.json',
+    'https://cdn.jsdelivr.net/gh/leyroma9-art/Guysx-technoknight-game@main/catalog.json',
+    'https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/Mods/catalog.json',
+    'https://raw.githubusercontent.com/leyroma9-art/Guysx-technoknight-game/main/catalog.json'
+  ],
+  cache: null
+};
+
+function modLibFileUrls(filePath){
+  const f = String(filePath || '').replace(/^\/+/, '');
+  const site = MOD_LIB.site;
+  const repo = MOD_LIB.repo;
+  const br = MOD_LIB.branch;
+  return [
+    site + '/' + f,
+    site + '/Mods/' + f,
+    'https://cdn.jsdelivr.net/gh/' + repo + '@' + br + '/' + f,
+    'https://cdn.jsdelivr.net/gh/' + repo + '@' + br + '/Mods/' + f,
+    'https://raw.githubusercontent.com/' + repo + '/' + br + '/' + f,
+    'https://raw.githubusercontent.com/' + repo + '/' + br + '/Mods/' + f
+  ];
+}
+
+async function fetchModCatalog(){
+  const status = document.getElementById('modLibStatus');
+  const list = document.getElementById('modLibList');
+  if(status){ status.style.color = '#888'; status.textContent = 'Загрузка каталога...'; }
+  if(list) list.innerHTML = '';
+  let lastErr = null;
+  for(const url of MOD_LIB.catalogUrls){
+    try {
+      const res = await fetch(url + (url.indexOf('?')>=0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if(!data || !Array.isArray(data.mods)) throw new Error('Неверный catalog.json');
+      MOD_LIB.cache = data;
+      if(status){
+        status.style.color = '#8f8';
+        status.textContent = 'Каталог v' + (data.version||'?') + ' · модов: ' + data.mods.length + (data.updated ? ' · ' + data.updated : '');
+      }
+      renderModLibrary(data);
+      return data;
+    } catch(e){
+      lastErr = e;
+      console.warn('[modlib]', url, e);
+    }
+  }
+  if(status){
+    status.style.color = '#f88';
+    status.textContent = 'Не удалось загрузить каталог. ' + (lastErr && lastErr.message ? lastErr.message : '');
+  }
+  return null;
+}
+
+function isModInstalled(idOrName){
+  if(typeof ensureCustomMods === 'function') ensureCustomMods();
+  if(!Array.isArray(mods.customMods)) return false;
+  const key = String(idOrName || '').toLowerCase();
+  return mods.customMods.some(function(m){
+    const n = String(m.name || '').toLowerCase();
+    return n === key || n === key + '.js' || n.indexOf(key) >= 0;
+  });
+}
+
+function renderModLibrary(data){
+  const list = document.getElementById('modLibList');
+  if(!list) return;
+  if(!data || !data.mods || !data.mods.length){
+    list.innerHTML = '<div style="color:#666;font-size:12px;padding:10px">Пусто</div>';
+    return;
+  }
+  list.innerHTML = data.mods.map(function(m){
+    const id = String(m.id || m.name || 'mod').replace(/[<>&"']/g,'');
+    const name = String(m.name || id).replace(/[<>&]/g,'');
+    const desc = String(m.desc || '').replace(/[<>&]/g,'');
+    const author = String(m.author || '').replace(/[<>&]/g,'');
+    const ver = String(m.version || '').replace(/[<>&]/g,'');
+    const tags = Array.isArray(m.tags) ? m.tags.map(function(x){return String(x).replace(/[<>&]/g,'');}).join(', ') : '';
+    const installed = isModInstalled(m.id) || isModInstalled(m.file);
+    const btnLabel = installed ? '✓ Установлен' : '⬇ Скачать';
+    const btnStyle = installed
+      ? 'background:#1a2a1a;border:1px solid #3a5;color:#8f8'
+      : 'background:#2a1515;border:1px solid #f44;color:#fff';
+    return '<div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:12px;text-align:left">'
+      + '<div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:4px">' + name
+      + (ver ? ' <span style="color:#666;font-weight:500;font-size:11px">v' + ver + '</span>' : '')
+      + '</div>'
+      + (author ? '<div style="font-size:11px;color:#888;margin-bottom:4px">👤 ' + author + '</div>' : '')
+      + (desc ? '<div style="font-size:12px;color:#aaa;line-height:1.35;margin-bottom:8px">' + desc + '</div>' : '')
+      + (tags ? '<div style="font-size:11px;color:#666;margin-bottom:8px">' + tags + '</div>' : '')
+      + '<button type="button" data-mod-dl="' + id + '" style="font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;' + btnStyle + '">' + btnLabel + '</button>'
+      + '</div>';
+  }).join('');
+
+  list.querySelectorAll('[data-mod-dl]').forEach(function(btn){
+    btn.onclick = async function(){
+      const mid = btn.getAttribute('data-mod-dl');
+      const entry = ((MOD_LIB.cache && MOD_LIB.cache.mods) || []).find(function(x){ return x.id === mid || x.name === mid; });
+      if(!entry) return;
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        await installModFromLibrary(entry);
+        btn.textContent = '✓ Установлен';
+        btn.style.background = '#1a2a1a';
+        btn.style.borderColor = '#3a5';
+        btn.style.color = '#8f8';
+      } catch(e){
+        console.error(e);
+        btn.textContent = 'Ошибка';
+        btn.style.borderColor = '#f44';
+        btn.style.color = '#f88';
+        const st = document.getElementById('modLibStatus');
+        if(st){ st.style.color = '#f88'; st.textContent = 'Ошибка: ' + (e.message || e); }
+      }
+      btn.disabled = false;
+    };
+  });
+}
+
+async function installModFromLibrary(entry){
+  const file = entry.file || entry.path;
+  if(!file) throw new Error('В каталоге нет поля file');
+  const urls = modLibFileUrls(file);
+  let code = null, lastErr = null;
+  for(let i=0;i<urls.length;i++){
+    const url = urls[i];
+    try {
+      const res = await fetch(url + (url.indexOf('?')>=0?'&':'?') + 't=' + Date.now(), { cache: 'no-store' });
+      if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
+      code = await res.text();
+      if(!code || code.length < 5) throw new Error('Пустой файл');
+      const trim = code.trim();
+      if(trim.indexOf('<!DOCTYPE')===0 || trim.indexOf('<html')===0 || trim.indexOf('Cannot GET')>=0)
+        throw new Error('HTML вместо JS: ' + url);
+      break;
+    } catch(e){ lastErr = e; code = null; }
+  }
+  if(code == null) throw lastErr || new Error('Не скачалось');
+  if(typeof ensureCustomMods === 'function') ensureCustomMods();
+  if(!Array.isArray(mods.customMods)) mods.customMods = [];
+  const name = (entry.id || 'mod') + '.js';
+  const existing = mods.customMods.findIndex(function(m){ return m.name === name || m.name === file; });
+  const item = { name: name, code: code, libId: entry.id || null };
+  if(existing >= 0) mods.customMods[existing] = item;
+  else mods.customMods.push(item);
+  if(typeof rebuildCustomCodeFromMods === 'function') rebuildCustomCodeFromMods();
+  if(typeof updateModCodeFileInfo === 'function') updateModCodeFileInfo();
+  if(typeof compileUserMod === 'function') compileUserMod();
+  try { localStorage.setItem('tk_mods', JSON.stringify(mods)); } catch(e){}
+}
+
+document.getElementById('btnLibRefresh') && document.getElementById('btnLibRefresh').addEventListener('click', function(){ fetchModCatalog(); });
+
+
+document.getElementById('btnMods').onclick = () => { loadModsToUI(); showScreen('modsScreen'); setTimeout(applyPlatformMode, 30); setTimeout(function(){ if(!MOD_LIB.cache) fetchModCatalog(); }, 80); };
 document.getElementById('btnModsBack').onclick = () => showScreen('mainMenu');
 
 document.getElementById('btnSaveMods').onclick = () => {
