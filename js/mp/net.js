@@ -273,8 +273,15 @@ function connectRoom(rawCode, create){
       // authoritative ability list for the room boss
       onUserBossAbilitiesReady(data.bossId, data.abilities||[], data.name);
     } else if(data.type === 'ub_atk'){
-      // everyone except local predictor (already ran) executes; if from self skip
-      if(data.from !== net.id) doUserBossAtk(data);
+      // remote ability VFX/effect (local already predicted)
+      if(data.from !== net.id && typeof applyRemoteUbAtk === 'function') applyRemoteUbAtk(data);
+      else if(data.from !== net.id){
+        try {
+          if(statusEl && data.ability){ statusEl.textContent = '👑 '+String(data.ability).toUpperCase(); statusEl.style.color='#f6f'; }
+          if(boss && typeof data.x==='number'){ boss.x = data.x; boss.y = data.y; }
+          if(boss && typeof data.hp==='number') boss.hp = data.hp;
+        } catch(e){}
+      }
     } else if(data.type === 'ub_state'){
       if(data.from !== net.id && window.userBoss && window.userBoss.active){
         if(!bossMode){ try{ startBoss(); }catch(e){} }
