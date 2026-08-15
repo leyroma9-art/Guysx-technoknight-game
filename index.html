@@ -2817,6 +2817,13 @@ function startGame(){
     if(healthEl && player) healthEl.textContent='❤️ '+Math.max(0,Math.ceil(player.hp));
     if(timerEl) timerEl.textContent='0.0с';
   } catch(e){}
+  try {
+    if(player && typeof cam!=='undefined'){
+      const zoom = cam.zoom || 1;
+      const vw = (W||innerWidth||800)/zoom, vh = (H||innerHeight||600)/zoom;
+      cam.x = player.x - vw/2; cam.y = player.y - vh/2;
+    }
+  } catch(e){}
   try { for(let i=0;i<5;i++) spawnGun(); } catch(e){}
   try { for(let i=0;i<3;i++) spawnMedkit(false); } catch(e){}
   try { modSolids = []; invalidateSolidGrid(); } catch(e){}
@@ -3513,10 +3520,27 @@ function die(reason){
 
 function update(){
   if(!running) return;
-  if(!player || typeof player.x !== 'number'){
-    try { ensurePlayer(world/2, world/2); } catch(e){ console.warn('ensurePlayer', e); return; }
+  if(!player || typeof player.x !== 'number' || !Number.isFinite(player.x)){
+    try {
+      const cx = (typeof world==='number' && world>0) ? world/2 : 1600;
+      ensurePlayer(cx, cx);
+    } catch(e){ console.warn('ensurePlayer', e); return; }
   }
-  const now=performance.now();
+  // keep camera on player even if later code throws
+  try {
+    if(typeof cam!=='undefined' && player && Number.isFinite(player.x)){
+      const zoom = cam.zoom || 1;
+      const vw = (W||innerWidth||800) / zoom;
+      const vh = (H||innerHeight||600) / zoom;
+      if(!Number.isFinite(cam.x) || !Number.isFinite(cam.y) || (Math.abs(cam.x+vw/2-player.x)>2000)){
+        cam.x = player.x - vw/2;
+        cam.y = player.y - vh/2;
+      }
+    }
+  } catch(e){}
+  let now;
+  try {
+  now=performance.now();
   let mx=0,my=0;
   if(settings && settings.controlType === 'joystick' && (joyVec.x !== 0 || joyVec.y !== 0)){
     const sens = settings.joySensitivity || 1.0;
@@ -4353,6 +4377,18 @@ function update(){
   }
   if(shake>0) shake*=0.86;
   runUserHook('onUpdate', 1/60);
+  } catch(err){
+    console.error('[update]', err);
+    // minimal HUD so screen is never stuck at 0.0с / Нажми Старт
+    try {
+      if(typeof t0==='number' && t0) time = (performance.now()-t0)/1000;
+      if(timerEl) timerEl.textContent = (time||0).toFixed(1)+'с';
+      if(statusEl && statusEl.textContent && statusEl.textContent.indexOf('Нажми')>=0){
+        statusEl.textContent = 'БЕГИ!!!'; statusEl.style.color = '#5af';
+      }
+      if(healthEl && player) healthEl.textContent = '❤️ '+Math.max(0,Math.ceil(player.hp||0));
+    } catch(e2){}
+  }
 }
 
 function draw(){
