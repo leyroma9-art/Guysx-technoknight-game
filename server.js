@@ -1,215 +1,138 @@
 /**
- * ТехноКнайт — сервер статики + WebSocket комнат
- * Совместим с клиентом: join → welcome, list → rooms, relay state/damage/boss/...
+ * Boss Fight Online — static + WebSocket rooms
  */
-const express = require('express');
-const http = require('http');
 const path = require('path');
+const http = require('http');
+const express = require('express');
 const { WebSocketServer } = require('ws');
 
 const app = express();
+const PORT = process.env.PORT || 8080;
+
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+app.use(express.static(__dirname, { setHeaders: (r) => r.set('Cache-Control', 'no-store') }));
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-// HTML/JSON/JS — без долгого кэша, чтобы обновления доходили без Ctrl+F5
-app.use((req, res, next) => {
-  const p = req.path || '';
-  if (p === '/' || p.endsWith('.html') || p.endsWith('.json') || p.endsWith('.js') || p.endsWith('.css')) {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-  } else {
-    res.setHeader('Cache-Control', 'public, max-age=300');
-  }
-  next();
-});
-app.use(express.static(path.join(__dirname), {
-  etag: true,
-  lastModified: true,
-  setHeaders(res, filePath) {
-    if (/\.(html|json|js|css)$/i.test(filePath) || filePath.endsWith('index.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-  }
-}));
-
-// code -> { clients: Map(id, {ws, name}), config, open, hostId }
 const rooms = new Map();
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+function listOpen() {
+  const out = [];
+  for (const [code, room] of rooms) {
+    if (!room.open || !room.clients.size) continue;
+    const host = room.clients.get(room.hostId);
+    out.push({
+      code,
+      count: room.clients.size,
+      hostName: host ? host.name : '',
+      mode: (room.config && room.config.mode) || 'boss'
+    });
+  }
+  return out;
+}
 
 function send(ws, obj) {
-  if (ws && ws.readyState === 1) {
-    try { ws.send(JSON.stringify(obj)); } catch (_) {}
-  }
+  if (ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
 
 function broadcast(room, obj, exceptId) {
-  if (!room) return;
+  const raw = JSON.stringify(obj);
   for (const [id, c] of room.clients) {
     if (exceptId && id === exceptId) continue;
-    send(c.ws, obj);
+    if (c.ws.readyState === 1) c.ws.send(raw);
   }
 }
 
-function roomCount(room) {
-  return room ? room.clients.size : 0;
-}
-
-function publicRoomsList() {
-  const list = [];
-  for (const [code, r] of rooms) {
-    if (!r.open) continue;
-    if (r.clients.size === 0) continue;
-    const host = r.clients.get(r.hostId);
-    list.push({
-      code,
-      room: code,
-      count: r.clients.size,
-      players: r.clients.size,
-      hostName: host ? host.name : '',
-      host: host ? host.name : ''
-    });
-  }
-  return list;
-}
-
-function destroyRoomIfEmpty(code) {
-  const r = rooms.get(code);
-  if (r && r.clients.size === 0) rooms.delete(code);
-}
+const RELAY = new Set([
+  'state', 'boss', 'chat', 'damage', 'victory',
+  'userboss', 'ub_abilities', 'ub_atk', 'ub_state', 'pvp_hit',
+  'modcode', 'modshared', 'modsolids', 'modmsg'
+]);
 
 wss.on('connection', (ws) => {
-  let roomCode = null;
-  let playerId = null;
+  let myId = null;
+  let myRoom = null;
 
-  ws.on('message', (raw) => {
-    let msg;
-    try {
-      msg = JSON.parse(String(raw));
-    } catch {
-      return;
-    }
-    if (!msg || typeof msg.type !== 'string') return;
+  ws.on('message', (buf) => {
+    let data;
+    try { data = JSON.parse(String(buf)); } catch { return; }
+    if (!data || !data.type) return;
 
-    // ----- список открытых комнат -----
-    if (msg.type === 'list') {
-      send(ws, { type: 'rooms', rooms: publicRoomsList() });
-      send(ws, { type: 'list', rooms: publicRoomsList() });
+    if (data.type === 'list') {
+      send(ws, { type: 'rooms', rooms: listOpen() });
       return;
     }
 
-    // ----- вход / создание комнаты -----
-    if (msg.type === 'join') {
-      const code = String(msg.room || '').trim().toUpperCase();
+    if (data.type === 'join') {
+      const code = String(data.room || '').trim().toUpperCase();
+      const name = String(data.name || 'Игрок').slice(0, 16);
       if (!/^[A-Z0-9]{4,8}$/.test(code)) {
-        send(ws, { type: 'error', message: 'Код: 4–8 латинских букв или цифр' });
+        send(ws, { type: 'error', message: 'Код: 4–8 латиница/цифры' });
         return;
       }
-
-      const name = String(msg.name || 'Игрок').slice(0, 16);
-      const wantCreate = !!msg.create;
       let room = rooms.get(code);
-
-      if (!room) {
-        // создаём комнату
-        room = {
-          clients: new Map(),
-          config: msg.config || {},
-          open: !!(msg.open || (msg.config && msg.config.open)),
-          hostId: null
-        };
+      if (data.create) {
+        if (room && room.clients.size) {
+          send(ws, { type: 'error', message: 'Комната занята' });
+          return;
+        }
+        room = { hostId: null, open: !!data.open, config: data.config || { mode: 'boss' }, clients: new Map() };
         rooms.set(code, room);
-      } else if (wantCreate && room.clients.size > 0) {
-        // комната уже занята — всё равно заходим как гость
+      } else if (!room || !room.clients.size) {
+        send(ws, { type: 'error', message: 'Комната не найдена' });
+        return;
       }
-
-      // если при создании передали config — обновляем
-      if (wantCreate && msg.config) {
-        room.config = msg.config;
-        room.open = !!(msg.open || msg.config.open);
-      }
-
-      playerId = Math.random().toString(36).slice(2, 10);
-      roomCode = code;
-      room.clients.set(playerId, { ws, name });
-
-      if (!room.hostId || !room.clients.has(room.hostId)) {
-        room.hostId = playerId;
-      }
-
-      const isHost = room.hostId === playerId;
-
-      send(ws, {
-        type: 'welcome',
-        room: code,
-        id: playerId,
-        host: isHost,
-        config: room.config || {}
+      myId = uid();
+      myRoom = code;
+      if (!room.hostId) room.hostId = myId;
+      room.clients.set(myId, { ws, name });
+      send(ws, { type: 'welcome', room: code, id: myId, host: room.hostId === myId, config: room.config });
+      broadcast(room, {
+        type: 'players',
+        count: room.clients.size,
+        players: [...room.clients.entries()].map(([id, c]) => ({ id, name: c.name }))
       });
-
-      broadcast(room, { type: 'room', count: roomCount(room) });
       return;
     }
 
-    // без комнаты дальше не обрабатываем
-    if (!roomCode || !playerId) return;
-    const room = rooms.get(roomCode);
-    if (!room || !room.clients.has(playerId)) return;
+    if (!myRoom || !myId) return;
+    const room = rooms.get(myRoom);
+    if (!room || !RELAY.has(data.type)) return;
 
-    // ----- исходящие от клиента — ретрансляция -----
-    // Всё, что клиенты шлют друг другу (чат, юзер-босс, стейт…)
-    const relayTypes = new Set([
-      'state', 'damage', 'boss', 'victory',
-      'modcode', 'modmsg', 'modshared', 'modsolids',
-      'chat', 'userboss', 'ub_abilities', 'ub_atk', 'ub_state'
-    ]);
-
-    if (relayTypes.has(msg.type)) {
-      const out = { ...msg, id: playerId };
-      // from всегда = кто реально отправил (для chat/ub_*)
-      if (!out.from) out.from = playerId;
-      // host может пушить мод-код всем
-      if (msg.type === 'modcode' && room.hostId !== playerId) return;
-      broadcast(room, out, playerId);
-      return;
+    const payload = Object.assign({}, data, { from: myId, id: data.id || myId });
+    if (data.type === 'chat') {
+      const me = room.clients.get(myId);
+      payload.name = (me && me.name) || 'Игрок';
     }
+    // state/boss/chat/... to everyone else (sender already predicted locally)
+    broadcast(room, payload, myId);
   });
 
   ws.on('close', () => {
-    if (!roomCode || !playerId) return;
-    const room = rooms.get(roomCode);
+    if (!myRoom || !myId) return;
+    const room = rooms.get(myRoom);
     if (!room) return;
-
-    room.clients.delete(playerId);
-    broadcast(room, { type: 'left', id: playerId });
-    broadcast(room, { type: 'room', count: roomCount(room) });
-
-    // если хост вышел — передать хоста другому
-    if (room.hostId === playerId) {
-      const next = room.clients.keys().next().value;
-      room.hostId = next || null;
-      if (next) {
-        const c = room.clients.get(next);
-        if (c) send(c.ws, { type: 'host' });
+    room.clients.delete(myId);
+    if (room.hostId === myId) {
+      const n = room.clients.keys().next();
+      room.hostId = n.done ? null : n.value;
+      if (room.hostId) {
+        const h = room.clients.get(room.hostId);
+        if (h) send(h.ws, { type: 'host' });
       }
     }
-
-    destroyRoomIfEmpty(roomCode);
-    roomCode = null;
-    playerId = null;
+    if (!room.clients.size) rooms.delete(myRoom);
+    else broadcast(room, {
+      type: 'players',
+      count: room.clients.size,
+      players: [...room.clients.entries()].map(([id, c]) => ({ id, name: c.name }))
+    });
   });
-
-  ws.on('error', () => {});
 });
 
-// чистка пустых комнат раз в минуту
-setInterval(() => {
-  for (const [code, r] of rooms) {
-    if (r.clients.size === 0) rooms.delete(code);
-  }
-}, 60000);
-
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log('ТехноКнайт MP: http://localhost:' + PORT);
-  console.log('WebSocket: ws://localhost:' + PORT + '/ws');
-});
+server.listen(PORT, () => console.log('Boss Fight Online :' + PORT));
