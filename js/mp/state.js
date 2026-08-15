@@ -2,7 +2,8 @@
 window.net = {
   socket: null, active: false, room: '', id: '', host: false,
   players: new Map(), lastSend: 0, config: null,
-  savedMods: null, savedBossMods: null
+  savedMods: null, savedBossMods: null,
+  _lastModSync: 0
 };
 window.mpMode = 'boss';
 window.userBoss = {
