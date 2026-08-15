@@ -62,8 +62,14 @@ function applyUserBossRole(bossId, name){
       boss.lastNpcSpawn = performance.now() + 9e9;
       boss.hp = boss.maxHp = Math.max(boss.maxHp||630, 800);
       boss.stun = 9999; // freeze until abilities picked
+      // place boss on player so camera/controls feel like empty-room
+      if(player){
+        boss.x = player.x;
+        boss.y = player.y;
+      }
     }
     if(bossHpEl) bossHpEl.style.display = 'block';
+    if(typeof snapCamToPlayer === 'function') snapCamToPlayer();
   } catch(e){ console.warn('[ub] startBoss', e); }
 
   if(window.userBoss.isMe){
@@ -160,7 +166,9 @@ function onUserBossAbilitiesReady(bossId, abilities, name){
       boss.lastTeleport = performance.now() + 9e9;
       boss.lastPhantom = performance.now() + 9e9;
       boss.lastNpcSpawn = performance.now() + 9e9;
+      if(player){ boss.x = player.x; boss.y = player.y; player.x = boss.x; player.y = boss.y; }
     }
+    if(typeof snapCamToPlayer === 'function') snapCamToPlayer();
   } catch(e){ console.warn('[ub] ready boss', e); }
 
   if(window.userBoss.isMe){
