@@ -1413,25 +1413,29 @@ let joyVec = {x:0, y:0};
 const JOY_MAX = 40; // max knob travel
 
 function showControls(){
-  const isTouch = window.matchMedia('(max-width:900px), (pointer:coarse)').matches;
-  const useJoy = settings.controlType === 'joystick';
-  const dashBtn = document.getElementById('dashBtn');
-  if(isTouch && running){
-    if(useJoy){
-      joyZone.style.display = 'block';
-      document.getElementById('mctrl').style.display = 'none';
+  try {
+    const isTouch = window.matchMedia('(max-width:900px), (pointer:coarse)').matches;
+    const useJoy = settings && settings.controlType === 'joystick';
+    const dashBtn = document.getElementById('dashBtn');
+    const mctrl = document.getElementById('mctrl');
+    const shootBtn = document.getElementById('shootBtn');
+    if(isTouch && running){
+      if(useJoy){
+        if(joyZone) joyZone.style.display = 'block';
+        if(mctrl) mctrl.style.display = 'none';
+      } else {
+        if(joyZone) joyZone.style.display = 'none';
+        if(mctrl) mctrl.style.display = 'flex';
+      }
+      if(shootBtn) shootBtn.style.display = 'flex';
+      if(dashBtn) dashBtn.style.display = 'flex';
     } else {
-      joyZone.style.display = 'none';
-      document.getElementById('mctrl').style.display = 'flex';
+      if(joyZone) joyZone.style.display = 'none';
+      if(mctrl) mctrl.style.display = 'none';
+      if(shootBtn) shootBtn.style.display = isTouch && running ? 'flex' : 'none';
+      if(dashBtn) dashBtn.style.display = 'none';
     }
-    document.getElementById('shootBtn').style.display = 'flex';
-    if(dashBtn) dashBtn.style.display = 'flex';
-  } else {
-    joyZone.style.display = 'none';
-    document.getElementById('mctrl').style.display = 'none';
-    document.getElementById('shootBtn').style.display = isTouch && running ? 'flex' : 'none';
-    if(dashBtn) dashBtn.style.display = 'none';
-  }
+  } catch(e){ console.warn('showControls', e); }
 }
 
 /** Create player if missing (load from save / direct boss) */
@@ -2800,19 +2804,22 @@ function startGame(){
   t0=performance.now(); time=0; running=true;
   showScreen(null);
   try { document.getElementById('roomScreen').classList.add('hidden'); } catch(e){}
-  document.getElementById('mainMenu').classList.add('hidden');
-  document.getElementById('settingsScreen').classList.add('hidden');
-  document.getElementById('go').classList.add('hidden');
-  document.getElementById('ui').classList.remove('hidden');
-  document.getElementById('bossHp').style.display='none';
-  cutscene.classList.remove('show');
-  showControls();
-  statusEl.textContent='БЕГИ!!!'; statusEl.style.color='#5af';
-  ammoEl.textContent='';
-  for(let i=0;i<5;i++) spawnGun();
-  for(let i=0;i<3;i++) spawnMedkit(false);
-  modSolids = []; invalidateSolidGrid();
-  // sprites stay cached in memory between runs
+  try { document.getElementById('mainMenu').classList.add('hidden'); } catch(e){}
+  try { document.getElementById('settingsScreen').classList.add('hidden'); } catch(e){}
+  try { document.getElementById('go').classList.add('hidden'); } catch(e){}
+  try { document.getElementById('ui').classList.remove('hidden'); } catch(e){}
+  try { document.getElementById('bossHp').style.display='none'; } catch(e){}
+  try { if(cutscene) cutscene.classList.remove('show'); } catch(e){}
+  try { showControls(); } catch(e){}
+  try {
+    if(statusEl){ statusEl.textContent='БЕГИ!!!'; statusEl.style.color='#5af'; }
+    if(ammoEl) ammoEl.textContent='';
+    if(healthEl && player) healthEl.textContent='❤️ '+Math.max(0,Math.ceil(player.hp));
+    if(timerEl) timerEl.textContent='0.0с';
+  } catch(e){}
+  try { for(let i=0;i<5;i++) spawnGun(); } catch(e){}
+  try { for(let i=0;i<3;i++) spawnMedkit(false); } catch(e){}
+  try { modSolids = []; invalidateSolidGrid(); } catch(e){}
   try { runUserHook('onStart'); } catch(e){ console.warn('onStart', e); }
   if(bossMods && bossMods.skipToBoss && !(window.mpMode==='empty'||window.mpMode==='userboss')){
     setTimeout(() => { if(running && !bossMode) startBoss(); }, 400);
@@ -3506,9 +3513,12 @@ function die(reason){
 
 function update(){
   if(!running) return;
+  if(!player || typeof player.x !== 'number'){
+    try { ensurePlayer(world/2, world/2); } catch(e){ console.warn('ensurePlayer', e); return; }
+  }
   const now=performance.now();
   let mx=0,my=0;
-  if(settings.controlType === 'joystick' && (joyVec.x !== 0 || joyVec.y !== 0)){
+  if(settings && settings.controlType === 'joystick' && (joyVec.x !== 0 || joyVec.y !== 0)){
     const sens = settings.joySensitivity || 1.0;
     mx = joyVec.x * sens;
     my = joyVec.y * sens;
