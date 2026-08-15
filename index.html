@@ -863,7 +863,7 @@ body.ios-mode .btn, body.ios-mode #shootBtn, body.ios-mode #joystickZone{
   </div>
 </div>
 <div id="userBossBar" style="display:none;position:absolute;bottom:calc(90px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:36;gap:8px;flex-wrap:wrap;justify-content:center;max-width:96vw;pointer-events:auto"></div>
-<div id="userBossPick" class="screen hidden" style="z-index:90;background:rgba(0,0,0,.94);pointer-events:auto">
+<div id="userBossPick" class="screen hidden" style="z-index:250;background:rgba(0,0,0,.96);pointer-events:auto">
   <h1 class="logo" style="font-size:22px;margin-bottom:8px">ТЫ БОСС</h1>
   <p class="subtitle" style="margin-bottom:12px">Выбери до 4 способностей — они синхронизируются со всеми</p>
   <div id="ubPickList" style="display:flex;flex-direction:column;gap:8px;max-width:340px;width:100%;text-align:left"></div>
@@ -1179,7 +1179,10 @@ document.getElementById('btnMpExit')?.addEventListener('click', () => {
 });
 document.getElementById('mpChatSend')?.addEventListener('click', function(){ sendChat(); });
 document.getElementById('mpChatInput')?.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); sendChat(); } });
-document.getElementById('btnUbConfirm')?.addEventListener('click', function(){ confirmUserBossPick(); });
+document.getElementById('btnUbConfirm')?.addEventListener('click', function(e){
+  e.preventDefault(); e.stopPropagation();
+  if(typeof confirmUserBossPick === 'function') confirmUserBossPick();
+});
 
 
 document.getElementById('btnCreateRoom').onclick = () => connectRoom(Math.random().toString(36).slice(2,6).toUpperCase(), true);
@@ -3712,8 +3715,14 @@ function update(){
   if(bossMode && boss && !makmarMode && !(typeof sidorasMode !== 'undefined' && sidorasMode) && !(typeof royalMode !== 'undefined' && royalMode)){
     if(bossIntro>0){ bossIntro--; }
     else if(boss.userControlled){
+      // freeze until ability pick is done
+      if(window.userBoss && !window.userBoss.pickDone){
+        if(boss) boss.stun = Math.max(boss.stun||0, 2);
+        // keep player on boss so camera stays
+        if(player && boss){ player.x = boss.x; player.y = boss.y; player.hp = 100; }
+      }
       // player-driven boss: move with stick / keys, no AI attacks
-      if(window.userBoss && window.userBoss.isMe){
+      else if(window.userBoss && window.userBoss.isMe && window.userBoss.pickDone){
         let mx=0,my=0;
         if(keys['w']||keys['ц']||keys['arrowup']||mdir.u) my-=1;
         if(keys['s']||keys['ы']||keys['arrowdown']||mdir.d) my+=1;
