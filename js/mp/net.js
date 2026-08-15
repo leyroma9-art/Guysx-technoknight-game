@@ -186,8 +186,22 @@ function connectRoom(rawCode, create){
       } catch(e){
         console.error('[net] startGame', e);
         status.textContent = 'Ошибка старта: ' + (e && e.message ? e.message : e);
-        return;
       }
+      // на всякий случай: игрок + UI, если startGame частично упал
+      try {
+        if(typeof ensurePlayer === 'function') ensurePlayer(
+          (typeof world==='number' ? world/2 : 1600),
+          (typeof world==='number' ? world/2 : 1600)
+        );
+        if(typeof running !== 'undefined') running = true;
+        if(typeof t0 !== 'undefined' && !t0) t0 = performance.now();
+        var ui = document.getElementById('ui'); if(ui) ui.classList.remove('hidden');
+        var rs = document.getElementById('roomScreen'); if(rs) rs.classList.add('hidden');
+        if(typeof statusEl !== 'undefined' && statusEl && (!statusEl.textContent || statusEl.textContent.indexOf('Нажми')>=0)){
+          statusEl.textContent = 'БЕГИ!!!'; statusEl.style.color = '#5af';
+        }
+        if(typeof showControls === 'function') showControls();
+      } catch(e){ console.warn('[net] force ready', e); }
       setTimeout(function(){
         try {
           if(typeof running !== 'undefined' && running){
@@ -197,7 +211,7 @@ function connectRoom(rawCode, create){
           console.error('[net] beginMode', e);
           if(status) status.textContent = 'Ошибка режима: ' + (e && e.message ? e.message : e);
         }
-      }, 120);
+      }, 150);
     } else if(data.type === 'modcode'){
       // live code push — у всех в комнате, даже без файлов
       if(typeof data.code === 'string'){
