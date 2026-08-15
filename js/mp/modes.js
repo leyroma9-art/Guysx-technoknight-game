@@ -1,3 +1,14 @@
+function snapCamToPlayer(){
+  try {
+    if(typeof player==='undefined' || !player || !Number.isFinite(player.x)) return;
+    if(typeof cam==='undefined' || !cam) return;
+    var zoom = cam.zoom || 1;
+    var vw = (typeof W==='number' && W ? W : (window.innerWidth||800)) / zoom;
+    var vh = (typeof H==='number' && H ? H : (window.innerHeight||600)) / zoom;
+    cam.x = player.x - vw/2;
+    cam.y = player.y - vh/2;
+  } catch(e){}
+}
 /* js/mp/modes.js */
 function isLocalUserBoss(){
   return !!(window.userBoss && window.userBoss.active && window.userBoss.isMe && typeof bossMode!=='undefined' && bossMode);
@@ -18,14 +29,21 @@ function beginMultiplayerMode(mode){
   window.mpMode = mode || 'boss';
   window.userBoss = { active:false, bossId:null, isMe:false, abilities:[], cd:{}, pickDone:false, name:'' };
   hideMpExtras();
+  try {
+    if(typeof ensurePlayer === 'function'){
+      var cx = (typeof world==='number' && world>0) ? world/2 : 1600;
+      ensurePlayer(cx, cx);
+    }
+  } catch(e){}
   if(window.mpMode === 'empty'){
     startEmptyRoom();
   } else if(window.mpMode === 'userboss'){
     if(typeof enemies!=='undefined') enemies = [];
     startUserBossFlow();
   } else if(typeof running!=='undefined' && running && typeof bossMode!=='undefined' && !bossMode){
-    startBoss();
+    try { startBoss(); } catch(e){ console.error('startBoss', e); }
   }
+  snapCamToPlayer();
 }
 function hideMpExtras(){
   ['mpMenuBtn','mpChat','userBossBar'].forEach(function(id){
@@ -53,4 +71,5 @@ function startEmptyRoom(){
     if(typeof compileUserMod === 'function') compileUserMod();
     if(typeof runUserHook === 'function') runUserHook('onStart');
   } catch(e){ console.warn('empty mods', e); }
+  snapCamToPlayer();
 }
