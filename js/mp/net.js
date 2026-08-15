@@ -309,9 +309,14 @@ function handleNetMessage(data, socket){
 
   if(data.type === 'state'){
     if(data.id && data.id !== net.id && net.players){
+      var prev = net.players.get(data.id);
+      var nx = Number(data.x), ny = Number(data.y);
       net.players.set(data.id, {
         id: data.id,
-        x: data.x, y: data.y, hp: data.hp,
+        x: prev && Number.isFinite(prev.x) ? prev.x : nx,
+        y: prev && Number.isFinite(prev.y) ? prev.y : ny,
+        tx: nx, ty: ny,
+        hp: data.hp,
         alive: data.alive !== false,
         name: data.name || 'Игрок',
         seen: Date.now()

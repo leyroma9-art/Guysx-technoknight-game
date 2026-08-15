@@ -20,17 +20,20 @@ function startUserBossFlow(){
   window.userBoss.abilities = [];
   window.userBoss.cd = {};
   if(net.host){
+    // short wait so late joiners can appear, then pick boss
     setTimeout(function(){
       if(!running || window.mpMode!=='userboss') return;
       var ids = [net.id];
-      net.players.forEach(function(_,id){ if(ids.indexOf(id)<0) ids.push(id); });
-      var pick = ids[Math.floor(Math.random()*ids.length)];
-      var name = pick===net.id
+      try {
+        net.players.forEach(function(_,id){ if(id && ids.indexOf(id)<0) ids.push(id); });
+      } catch(e){}
+      var pick = ids[Math.floor(Math.random()*ids.length)] || net.id;
+      var name = pick === net.id
         ? ((document.getElementById('playerNameInput')||{}).value||'Хост').slice(0,16)
         : (((net.players.get(pick)||{}).name)||'Игрок').slice(0,16);
       sendNet({ type:'userboss', bossId: pick, name: name });
       applyUserBossRole(pick, name);
-    }, 700);
+    }, 400);
   }
 }
 
