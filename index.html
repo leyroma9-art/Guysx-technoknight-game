@@ -3541,8 +3541,11 @@ function update(){
   const viewW = W / zoom, viewH = H / zoom;
   // multiplayer: hard snap like empty-room (no laggy lerp that feels frozen)
   if(net && net.active){
-    cam.x = player.x - viewW/2;
-    cam.y = player.y - viewH/2;
+    // always center on local body (hunter or user-boss rider)
+    const cx = (window.userBoss && window.userBoss.isMe && boss) ? boss.x : player.x;
+    const cy = (window.userBoss && window.userBoss.isMe && boss) ? boss.y : player.y;
+    cam.x = cx - viewW/2;
+    cam.y = cy - viewH/2;
   } else {
     cam.x += (player.x - viewW/2 - cam.x) * 0.18;
     cam.y += (player.y - viewH/2 - cam.y) * 0.18;
@@ -4774,21 +4777,44 @@ function draw(){
     ctx.fillStyle='#0c8'; ctx.fillRect(teammate.x-20,teammate.y+21,40*Math.max(0,Math.min(1,(teammate.hp||0)/100)),4);
   }
 
-  // player — если ты юзер-босс, моделька охотника не нужна (видна модель босса)
+  // player — яркий маркер в центре камеры (не рисуем охотника, если ты юзер-босс)
   if(player && !(window.userBoss && window.userBoss.isMe && bossMode)){
-    const pg=ctx.createRadialGradient(player.x,player.y,2,player.x,player.y,player.r*2.4);
-    pg.addColorStop(0,'rgba(80,220,255,0.5)'); pg.addColorStop(1,'transparent');
-    ctx.fillStyle=pg; ctx.beginPath(); ctx.arc(player.x,player.y,player.r*2.4,0,Math.PI*2); ctx.fill();
+    const pr = Math.max(player.r||16, 16);
+    // outer glow
+    const pg=ctx.createRadialGradient(player.x,player.y,2,player.x,player.y,pr*3.2);
+    pg.addColorStop(0,'rgba(100,240,255,0.7)');
+    pg.addColorStop(0.45,'rgba(50,180,255,0.25)');
+    pg.addColorStop(1,'transparent');
+    ctx.fillStyle=pg; ctx.beginPath(); ctx.arc(player.x,player.y,pr*3.2,0,Math.PI*2); ctx.fill();
+    // body
     if(settings.playerImg && playerImg.complete && playerImg.naturalWidth){
-      ctx.save(); ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.clip();
-      ctx.drawImage(playerImg,player.x-player.r,player.y-player.r,player.r*2,player.r*2); ctx.restore();
-      ctx.strokeStyle='#3de'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.stroke();
+      ctx.save(); ctx.beginPath(); ctx.arc(player.x,player.y,pr,0,Math.PI*2); ctx.clip();
+      ctx.drawImage(playerImg,player.x-pr,player.y-pr,pr*2,pr*2); ctx.restore();
     } else {
-      ctx.fillStyle=player.hp<35?'#f55':'#3de'; ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(player.x-5,player.y-4,4.2,0,Math.PI*2); ctx.arc(player.x+5,player.y-4,4.2,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(player.x-5,player.y-4,2,0,Math.PI*2); ctx.arc(player.x+5,player.y-4,2,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=player.hp<35?'#f55':'#2cf';
+      ctx.beginPath(); ctx.arc(player.x,player.y,pr,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(player.x-5,player.y-4,4.2,0,Math.PI*2); ctx.arc(player.x+5,player.y-4,4.2,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#111';
+      ctx.beginPath(); ctx.arc(player.x-5,player.y-4,2,0,Math.PI*2); ctx.arc(player.x+5,player.y-4,2,0,Math.PI*2); ctx.fill();
     }
-    if(player.hp<100){ ctx.fillStyle='#222'; ctx.fillRect(player.x-20,player.y-player.r-12,40,5); ctx.fillStyle='#0c8'; ctx.fillRect(player.x-20,player.y-player.r-12,40*(player.hp/100),5); }
+    // white ring so always visible on dark grid
+    ctx.strokeStyle='#fff'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(player.x,player.y,pr+1,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle='#0af'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(player.x,player.y,pr+4,0,Math.PI*2); ctx.stroke();
+    // name tag
+    try {
+      const nm = (document.getElementById('playerNameInput')?.value||'Ты').slice(0,12);
+      ctx.font='bold 13px system-ui,sans-serif';
+      ctx.textAlign='center';
+      ctx.lineWidth=3; ctx.strokeStyle='#000'; ctx.strokeText(nm, player.x, player.y-pr-16);
+      ctx.fillStyle='#8ef'; ctx.fillText(nm, player.x, player.y-pr-16);
+    } catch(e){}
+    // hp bar always
+    ctx.fillStyle='#222'; ctx.fillRect(player.x-22,player.y+pr+8,44,6);
+    ctx.fillStyle=player.hp<35?'#e33':'#0c8';
+    ctx.fillRect(player.x-22,player.y+pr+8,44*Math.max(0,Math.min(1,(player.hp||0)/100)),6);
   }
 
   // Mod solids default draw + custom onDraw (frustum cull)
