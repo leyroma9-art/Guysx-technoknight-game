@@ -82,11 +82,21 @@ function stopRoomListPoll(){
 }
 
 function leaveMultiplayer(){
-  if(net.socket) net.socket.close();
-  if(net.savedMods){ mods = net.savedMods; bossMods = net.savedBossMods; compileUserMod(); }
-  net.socket = null; net.active = false; net.room = ''; net.id = ''; net.host = false; net.players.clear();
-  net.config = null; net.savedMods = null; net.savedBossMods = null;
-  roomHudEl.textContent = '';
+  try { if(net && net.socket) net.socket.close(); } catch(e){}
+  try {
+    if(net && net.savedMods){
+      mods = net.savedMods; bossMods = net.savedBossMods;
+      if(typeof compileUserMod === 'function') compileUserMod();
+    }
+  } catch(e){}
+  try {
+    if(net){
+      net.socket = null; net.active = false; net.room = ''; net.id = ''; net.host = false;
+      if(net.players && net.players.clear) net.players.clear();
+      net.config = null; net.savedMods = null; net.savedBossMods = null;
+    }
+  } catch(e){}
+  try { if(typeof roomHudEl!=='undefined' && roomHudEl) roomHudEl.textContent = ''; } catch(e){}
   try { hideMpExtras(); window.mpMode='boss'; window.userBoss={active:false,bossId:null,isMe:false,abilities:[],cd:{},pickDone:false,name:''}; } catch(e){}
 }
 

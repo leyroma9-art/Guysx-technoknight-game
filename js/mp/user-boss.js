@@ -65,6 +65,9 @@ function openUserBossPick(){
     });
   });
   scr.classList.remove('hidden');
+  scr.style.display = 'flex';
+  scr.style.zIndex = '200';
+  scr.style.pointerEvents = 'auto';
 }
 
 function confirmUserBossPick(){
